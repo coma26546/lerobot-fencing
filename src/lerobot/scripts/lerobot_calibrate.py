@@ -38,6 +38,7 @@ from lerobot.robots import (  # noqa: F401
     RobotConfig,
     bi_openarm_follower,
     bi_so_follower,
+    fencing_bot,
     hope_jr,
     koch_follower,
     lekiwi,

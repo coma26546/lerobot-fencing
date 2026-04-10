@@ -46,6 +46,7 @@ from lerobot.cameras.realsense.configuration_realsense import RealSenseCameraCon
 from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
+    fencing_bot,
     hope_jr,
     koch_follower,
     lekiwi,
