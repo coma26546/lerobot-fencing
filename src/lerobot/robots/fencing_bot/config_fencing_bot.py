@@ -15,6 +15,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from lerobot.cameras import CameraConfig
 
@@ -35,6 +36,9 @@ class FencingBotArmConfig:
     cameras: dict[str, CameraConfig] = field(default_factory=dict)
 
     use_degrees: bool = True
+
+    # If set, JSON file for named poses (see lerobot-fencing-positions). Otherwise HF_LEROBOT_HOME/fencing_bot_positions/<id>.json
+    saved_positions_path: Path | None = None
 
 
 @RobotConfig.register_subclass("fencing_bot")

@@ -14,9 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import logging
 import time
 from functools import cached_property
+from pathlib import Path
+from typing import Any
 
 from lerobot.cameras.utils import make_cameras_from_configs
 from lerobot.motors import Motor, MotorCalibration, MotorNormMode
@@ -25,6 +28,7 @@ from lerobot.motors.feetech import (
     OperatingMode,
 )
 from lerobot.types import RobotAction, RobotObservation
+from lerobot.utils.constants import HF_LEROBOT_HOME
 from lerobot.utils.decorators import check_if_already_connected, check_if_not_connected
 
 from ..robot import Robot
@@ -37,7 +41,9 @@ logger = logging.getLogger(__name__)
 class FencingBot(Robot):
     """
     Single-arm fencing robot follower: Feetech STS3215 chain (same layout as SO-100 style arms).
-    Adjust the motor map in code if your hardware differs.
+    Calibration follows the SO-100 style: move joints manually through ranges when prompted.
+
+    Use `lerobot-fencing-positions` to capture named poses and recall them by index from the terminal.
     """
 
     config_class = FencingBotConfig
@@ -60,6 +66,66 @@ class FencingBot(Robot):
             calibration=self.calibration,
         )
         self.cameras = make_cameras_from_configs(config.cameras)
+
+    @property
+    def saved_positions_fpath(self) -> Path:
+        if self.config.saved_positions_path is not None:
+            return Path(self.config.saved_positions_path)
+        rid = self.id if self.id else "default"
+        return HF_LEROBOT_HOME / "fencing_bot_positions" / f"{rid}.json"
+
+    def joint_positions_from_observation(self, observation: RobotObservation) -> RobotAction:
+        """Joint goal keys (`motor.pos`) only; excludes camera frames and other keys."""
+        return {k: float(v) for k, v in observation.items() if k.endswith(".pos")}
+
+    def load_saved_poses(self) -> list[dict[str, Any]]:
+        path = self.saved_positions_fpath
+        if not path.is_file():
+            return []
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        poses = data.get("poses", [])
+        if not isinstance(poses, list):
+            raise ValueError(f"Invalid poses file {path}: 'poses' must be a list")
+        return poses
+
+    def write_saved_poses(self, poses: list[dict[str, Any]]) -> None:
+        path = self.saved_positions_fpath
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"poses": poses}, f, indent=2)
+        logger.info("Saved %d pose(s) to %s", len(poses), path)
+
+    def validate_pose_joints(self, joints: dict[str, Any]) -> None:
+        expected = set(self.action_features)
+        got = set(joints)
+        if got != expected:
+            missing = expected - got
+            extra = got - expected
+            raise ValueError(f"Pose joints must match robot motors. Missing: {missing}, extra: {extra}")
+
+    def capture_pose(self, name: str, poses: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+        """Append current joint pose as `{"name": ..., "joints": {...}}` and persist. Pass `poses` to update a working list."""
+        obs = self.get_observation()
+        joints = self.joint_positions_from_observation(obs)
+        self.validate_pose_joints(joints)
+        updated = list(poses) if poses is not None else self.load_saved_poses()
+        entry = {"name": name.strip() or f"pose_{len(updated) + 1}", "joints": joints}
+        updated.append(entry)
+        self.write_saved_poses(updated)
+        return updated
+
+    def go_to_saved_pose(self, pose_index_one_based: int, poses: list[dict[str, Any]] | None = None) -> RobotAction:
+        """Move arm to pose #1, #2, ... (1-based). Uses `send_action` (position hold)."""
+        plist = poses if poses is not None else self.load_saved_poses()
+        if not plist:
+            raise ValueError("No saved poses. Use capture <name> first (or check your poses file).")
+        if pose_index_one_based < 1 or pose_index_one_based > len(plist):
+            raise IndexError(f"Pose index must be 1..{len(plist)}, got {pose_index_one_based}")
+        raw = plist[pose_index_one_based - 1]["joints"]
+        joints = {k: float(v) for k, v in raw.items()}
+        self.validate_pose_joints(joints)
+        return self.send_action(joints)
 
     @property
     def _motors_ft(self) -> dict[str, type]:
