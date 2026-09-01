@@ -92,7 +92,10 @@ class SOFollower(Robot):
         """
 
         self.bus.connect()
-        if not self.is_calibrated and calibrate:
+        # Check `calibrate` first. Reading calibration registers uses retries
+        # and must be skipped by callers such as `lerobot-calibrate` that
+        # explicitly connect with calibration disabled.
+        if calibrate and not self.is_calibrated:
             logger.info(
                 "Mismatch between calibration values in the motor and the calibration file or no calibration file found"
             )

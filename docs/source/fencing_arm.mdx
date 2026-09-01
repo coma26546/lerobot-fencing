@@ -1,0 +1,551 @@
+# FencingArm
+
+FencingArm is a five-axis, Feetech-driven robot arm intended for fencing experiments. It is registered in
+LeRobot as `fencing_arm` and inherits the connection, camera, safety-clamping, and position-control behavior
+of the SO follower family while keeping its own motor layout and calibration files.
+
+> [!WARNING]
+> Treat the arm as experimental hardware. Begin with the weapon removed, keep the workspace clear, provide
+> an accessible emergency power disconnect, and use conservative joint limits and motion increments. Never
+> place a person in the arm's reachable workspace during setup, calibration, replay, or policy evaluation.
+
+## Hardware definition
+
+The motors are split across two independently powered Feetech serial buses to provide sufficient current:
+
+- **Bus 1:** `shoulder_yaw` (ID 1) and `shoulder_pitch` (ID 2)
+- **Bus 2:** `elbow_pitch` (ID 3), `elbow_roll` (ID 4), and `wrist_pitch` (ID 5)
+
+| Motor ID | Joint name       | Motor model | Mechanical notes                  |
+| :------: | ---------------- | :---------: | --------------------------------- |
+|    1     | `shoulder_yaw`   |   STS3250   | Direct drive                      |
+|    2     | `shoulder_pitch` |   STS3250   | 2:1 reduction at the joint output |
+|    3     | `elbow_pitch`    |   STS3250   | Direct drive                      |
+|    4     | `elbow_roll`     |   STS3250   | Direct drive                      |
+|    5     | `wrist_pitch`    |   STS3215   | 12 V, 30 kg-cm version            |
+
+The software stores the shoulder-pitch reduction as `shoulder_pitch_gear_ratio=2.0`. Position observations
+and actions currently remain in **motor-shaft coordinates**. With the default degree normalization, a 20°
+shoulder-pitch motor movement produces approximately 10° at the joint output. The reduction approximately
+doubles output torque, ignoring transmission losses. Account for this when defining physical joint limits,
+kinematics, or a URDF.
+
+## Install the project
+
+From the repository root, install the project and Feetech support:
+
+```bash
+uv sync --locked --extra feetech
+```
+
+If the environment is already installed with all hardware extras, no additional step is needed.
+
+The multiline examples below use Bash-style `\` continuation. In PowerShell, either enter each command on
+one line or replace each trailing `\` with PowerShell's backtick continuation character.
+
+## Find both serial ports
+
+Connect and power one Feetech controller at a time, then run:
+
+```bash
+uv run lerobot-find-port
+```
+
+The current FencingArm wiring uses `COM4` for bus 1 (motor IDs 1–2) and `COM3` for bus 2 (motor IDs 3–5).
+Both controllers must be connected for normal operation.
+
+## Assign motor IDs
+
+New or repurposed motors must be assigned the IDs in the hardware table. Run:
+
+```bash
+uv run lerobot-setup-motors \
+    --robot.type=fencing_arm \
+    --robot.port_1=COM4 \
+    --robot.port_2=COM3
+```
+
+Follow each prompt carefully. Connect **only the named motor** to its assigned controller before pressing
+Enter. Motors 1–2 belong to bus 1 and motors 3–5 belong to bus 2. The tool proceeds from `wrist_pitch` (ID 5)
+backward to `shoulder_yaw` (ID 1). Afterward, power off and daisy-chain motors only within their assigned bus.
+
+This writes persistent motor configuration and normally only needs to be repeated after replacing a motor,
+changing its ID, or resetting its EEPROM.
+
+## Calibrate
+
+Choose a stable ID for the physical arm. The ID determines which calibration file is loaded in future runs.
+
+```bash
+uv run lerobot-calibrate \
+    --robot.type=fencing_arm \
+    --robot.port_1=COM4 \
+    --robot.port_2=COM3 \
+    --robot.id=fencing_arm_01
+```
+
+The calibration sequence is:
+
+1. Support the arm so it cannot fall when torque is disabled.
+2. Move every joint to approximately the middle of its safe mechanical range and press Enter.
+3. Slowly move each joint through its **entire safe range**, without forcing a hard stop.
+4. Press Enter to finish and save the measured limits.
+
+Calibration is stored under the LeRobot cache in `calibration/robots/fencing_arm/`, keyed by robot ID. Use
+the same `--robot.id` whenever controlling this physical arm. To recalibrate, run the command again and type
+`c` when asked whether to reuse the existing calibration.
+
+> [!CAUTION]
+> The shoulder-pitch motor turns twice as far as the shoulder-pitch output because of its 2:1 reduction. Move
+> the physical joint through its safe output range during calibration; do not rotate the output past its
+> mechanical limits in an attempt to produce a full motor revolution.
+
+## First connection and observation check
+
+Before commanding motion, verify that the arm connects and reports all five joints:
+
+```python
+from lerobot.robots.fencing_arm import FencingArm, FencingArmConfig
+
+config = FencingArmConfig(
+    port_1="COM4",
+    port_2="COM3",
+    id="fencing_arm_01",
+    max_relative_target=5.0,
+)
+
+with FencingArm(config) as arm:
+    observation = arm.get_observation()
+    print(observation)
+```
+
+Expected observation keys are:
+
+```text
+shoulder_yaw.pos
+shoulder_pitch.pos
+elbow_pitch.pos
+elbow_roll.pos
+wrist_pitch.pos
+```
+
+`max_relative_target=5.0` limits each command to at most five motor-coordinate degrees from the currently
+reported position. Keep this limit small during initial tests.
+
+## Controlled motion smoke test
+
+The safest first command is the current pose itself. The following example reads the arm and sends that pose
+back unchanged:
+
+```python
+from lerobot.robots.fencing_arm import FencingArm, FencingArmConfig
+
+config = FencingArmConfig(
+    port="PORT",
+    id="fencing_arm_01",
+    max_relative_target=2.0,
+)
+
+with FencingArm(config) as arm:
+    current_pose = {
+        key: value
+        for key, value in arm.get_observation().items()
+        if key.endswith(".pos")
+    }
+    sent_pose = arm.send_action(current_pose)
+    print(sent_pose)
+```
+
+For subsequent tests, change only one joint by a small amount and confirm its direction before testing the
+next joint. If a joint direction is reversed, correct and repeat calibration rather than compensating in a
+policy or dataset.
+
+## Record en garde and other named poses
+
+Named poses let you teach the arm by physically moving it, without a teleoperator. Each physical arm gets
+its own pose file based on `--robot.id`.
+
+First record the required standby pose, named `enguard` by default:
+
+```bash
+uv run lerobot-fencing-arm-record-pose \
+    --robot.port_1=COM4 \
+    --robot.port_2=COM3 \
+    --robot.id=fencing_arm_01
+```
+
+The command connects to the arm, turns torque off, and waits. Support the arm, manually move it into en garde,
+then press Enter. En garde is always recorded as one standalone standby pose.
+
+To record a motion such as `lunge`:
+
+```bash
+uv run lerobot-fencing-arm-record-pose \
+    --robot.port_1=COM4 \
+    --robot.port_2=COM3 \
+    --robot.id=fencing_arm_01 \
+    --pose=parry4_demo
+```
+
+The terminal asks how many keyframes the motion should contain, not counting `enguard`. Enter a positive
+whole number. With torque remaining off, move the arm to each requested keyframe and press Enter to save it.
+Record the frames in the exact order the arm should execute them. Recording the same motion again replaces
+its keyframe sequence.
+
+Pose and motion names use lowercase letters, numbers, underscores, and hyphens. They must begin with a
+letter. Files are stored in the arm's `poses` directory beside its calibration data. They also record the
+normalization mode and shoulder gear ratio; the software refuses to load them if those settings no longer
+match.
+
+> [!WARNING]
+> Torque turns off during recording, so gravity may make the arm drop immediately. Remove the weapon and
+> support the arm before running the command. Keep clear of pinch points.
+
+## Stand by in en garde and execute a preset
+
+After both `enguard` and the desired motion have been recorded, run:
+
+```bash
+uv run lerobot-fencing-arm-run-pose \
+    --robot.port_1=COM4 \
+    --robot.port_2=COM3 \
+    --robot.id=fencing_arm_01 \
+    --pose=cut5_demo
+```
+
+The command performs this sequence:
+
+1. Validates `enguard` and every motion keyframe before enabling motion.
+2. Waits for confirmation, then approaches `enguard` in small increments.
+3. Holds en garde in standby until you press Enter.
+4. Executes every requested keyframe in its recorded order.
+5. Holds the final keyframe until you press Enter again, then disables torque and exits.
+
+Within each transition, all joints advance by the same percentage of their required travel. This keeps the
+joints synchronized instead of allowing short-distance joints to finish before long-distance joints.
+
+## Smooth and edit a recorded motion
+
+Newly recorded motions use `smoothstep` interpolation by default. It eases each transition in and out instead
+of changing velocity abruptly at a keyframe. Use `smootherstep` for an even softer start and stop, or `linear`
+for constant progress through a transition.
+
+You can edit timing without recording the arm again. With `--robot.id=fencing_arm_01`, open this file on
+Windows:
+
+```text
+C:\Users\Colin\.cache\huggingface\lerobot\calibration\robots\fencing_arm\poses\fencing_arm_01.json
+```
+
+Stop the pose command before editing the file. Find the motion under `motions`; a tuned motion can look like:
+
+```json
+"cut5": {
+  "keyframes": [
+    {
+      "pose": "cut5__keyframe_01",
+      "duration_s": 0.8,
+      "easing": "smootherstep",
+      "joint_timing": {
+        "shoulder_yaw.pos": {
+          "start_fraction": 0.0,
+          "end_fraction": 0.75
+        },
+        "elbow_pitch.pos": {
+          "start_fraction": 0.15,
+          "end_fraction": 1.0
+        }
+      }
+    }
+  ]
+}
+```
+
+`duration_s` is the requested minimum time for that transition. The controller may lengthen it to obey
+`--max_step`. Leave it as `null` to calculate the duration from `--max_step` and `--fps`.
+
+`start_fraction` and `end_fraction` are positions in the transition from `0.0` to `1.0`. In the example,
+shoulder yaw begins immediately and finishes 75% of the way through, while elbow pitch waits until 15% before
+engaging. Joints omitted from `joint_timing` use the whole transition (`0.0` to `1.0`). To make one joint
+engage sooner, lower its `start_fraction`, raise the other joints' start fractions, or both. The valid rule is
+`0 <= start_fraction < end_fraction <= 1`.
+
+Every keyframe has its own duration, easing, and per-joint timing, so you can adjust the rhythm of a complete
+cut numerically and rerun the normal command. The saved pose numbers under `poses` are also editable, but make
+small changes and preserve all five joint keys. Invalid timing or pose data is rejected before torque is
+enabled.
+
+### Record a complete hand-guided movement
+
+To capture the continuous movement instead of choosing keyframes, run:
+
+```bash
+uv run lerobot-fencing-arm-record-motion \
+    --robot.port_1=COM4 \
+    --robot.port_2=COM3 \
+    --robot.id=fencing_arm_01 \
+    --motion=cut4_demo \
+    --sample_fps=60 \
+    --max_duration_s=60
+```
+
+The command moves to `enguard` with torque enabled. Support the arm and press Enter when prompted; torque is
+then disabled and sampling begins. Perform the movement slowly by hand and press Enter again to stop. The
+recording is written into the same JSON file under `recordings`. Do not use the same name as a keyframe motion;
+a recording takes precedence when both have the same name.
+
+Its editable controls look like this:
+
+```json
+"cut5_demo": {
+  "sample_fps": 30.0,
+  "trim_start_s": 0.25,
+  "trim_end_s": 0.15,
+  "playback_speed": 2.5,
+  "smoothing_window": 5,
+  "joint_delays_s": {
+    "wrist_pitch.pos": 0.20
+  },
+  "samples": []
+}
+```
+
+Keep the generated `samples` array; it contains every measured joint position and timestamp. Set
+`trim_start_s` to remove waiting or an untorque jostle from the beginning, and `trim_end_s` to remove dead time
+after the motion. `playback_speed=2.5` reproduces the useful portion 2.5 times faster. `smoothing_window` is a
+moving-average filter measured in samples: `1` disables smoothing, while `3`, `5`, or `7` progressively smooth
+the path. It must be a positive odd integer. Large windows can round off intentional sharp direction changes.
+`joint_delays_s` delays only the named motor's recorded trajectory while preserving its shape. Positive values
+are seconds in the recording's original timeline, before `playback_speed` is applied. For example, a wrist
+delay of `0.20` becomes `0.10` seconds during playback at `2.0x`. Other joints hold their final positions while
+a delayed joint finishes. Derived recordings inherit these delays and may override individual joint values.
+
+You may also edit individual `time_s` or joint values inside `samples`. Sample times must remain strictly
+increasing and every sample must retain all five joint keys. Usually trimming, playback speed, and a smoothing
+window of `3` or `5` are enough.
+
+Replay the demonstration with the same runner:
+
+```bash
+uv run lerobot-fencing-arm-run-pose \
+    --robot.port_1=COM4 \
+    --robot.port_2=COM3 \
+    --robot.id=fencing_arm_01 \
+    --pose=cut5_demo \
+    --max_step=6 \
+    --fps=60
+```
+
+Here `--fps` is the playback control rate, not a camera setting. `--max_step` still caps how far a motor goal
+may change in one update, so a very high playback speed may be limited by that cap.
+
+### Run a movement and graph motor telemetry
+
+Use the telemetry runner for either a keyframe motion or a hand-recorded motion:
+
+```bash
+uv run lerobot-fencing-arm-run-telemetry \
+    --robot.port_1=COM4 \
+    --robot.port_2=COM3 \
+    --robot.id=fencing_arm_01 \
+    --pose=cut5_demo \
+    --max_step=6 \
+    --fps=60 \
+    --telemetry_fps=5
+```
+
+Every run creates a timestamped directory under `outputs/fencing_arm_telemetry`. It writes
+`telemetry.csv` incrementally and flushes it continuously, so most collected data survives a program crash or
+loss of PC power. After a successful run it produces separate SVG graphs for angular position, voltage,
+current, torque/load estimate, velocity, and temperature versus time. It also produces voltage, current,
+torque/load, velocity, and temperature versus angular position. Every graph contains all five motors with a
+different colored line and legend.
+
+Feetech exposes load feedback rather than a calibrated shaft-torque measurement, so the torque graph is
+labeled `Torque/load estimate (%)`. Current and velocity are retained in raw controller units until a verified
+conversion for each exact motor model is configured. Do not treat those graphs as calibrated SI measurements.
+
+Telemetry adds serial-bus reads during control. Start with `--telemetry_fps=5`; increasing it creates denser
+graphs but can reduce the motion-control update rate. SVG files open directly in a browser or VS Code and do
+not require matplotlib or another plotting dependency.
+
+In the interactive fencing-arm console, moves can be entered by their full name or with these number
+shortcuts: `1=cut5`, `2=cut4`, `3=cut3`, `4=parry4`, `5=parry5`, and `6=parry3`. Shortcut `6` becomes usable
+as soon as a pose, keyframe motion, or recording named `parry3` exists. The JSON pose file is reloaded before
+each selected move, so saved edits take effect without restarting the console.
+
+Add `--action_delay_s=3` to the console command to wait three seconds after entering a move number or name
+before motion begins. The delay applies to the selected action, not the automatic return to en garde.
+
+The main motion controls are:
+
+| Option                         | Default | Purpose                                             |
+| ------------------------------ | :-----: | --------------------------------------------------- |
+| `--standby_max_step=2.0`        |   2.0   | Maximum step while approaching the standby pose     |
+| `--standby_fps=30`              |   30    | Standby-approach control updates per second          |
+| `--standby_tolerance=2.0`       |   2.0   | Error allowed before the en garde prompt appears     |
+| `--max_step=6.0`                |   6.0   | Maximum step while executing the selected preset    |
+| `--fps=30`                      |   30    | Selected-preset control updates per second           |
+| `--timeout_s=120`              |   120   | Maximum time allowed for each pose transition       |
+| `--keyframe_tolerance=2.0`     |   2.0   | Error allowed before advancing intermediate frames  |
+| `--tolerance=0.5`              |   0.5   | Maximum remaining joint error accepted as complete  |
+| `--confirm_each_move`          |  true   | Prompt before motion; set to `false` to automate     |
+| `--hold_at_target`             |  true   | Hold the target; set to `false` to exit immediately  |
+| `--standby_pose=another_name`  | enguard | Use a different recorded standby pose               |
+
+For early testing, keep confirmation and holding enabled and lower `--max_step`, for example:
+
+```bash
+uv run lerobot-fencing-arm-run-pose \
+    --robot.port_1=COM4 \
+    --robot.port_2=COM3 \
+    --robot.id=fencing_arm_01 \
+    --pose=lunge \
+    --standby_max_step=0.25 \
+    --standby_fps=15 \
+    --max_step=1.0 \
+    --fps=30
+```
+
+Press Ctrl+C at a confirmation prompt or while holding to abort. The command's cleanup path disconnects the
+arm and disables torque. An external power disconnect is still required because software cleanup cannot
+protect against a crashed process, disconnected USB cable, or controller fault.
+
+The fencing arm does not use the generic SO follower's reduced holding gain. By default it programs the
+Feetech position-loop coefficients to P/I/D `32/0/32`, uses the maximum runtime torque limit (`1000`), and
+sets acceleration to `254`. These can be changed with `--robot.position_p_coefficient`,
+`--robot.position_i_coefficient`, `--robot.position_d_coefficient`, `--robot.torque_limit`, and
+`--robot.acceleration`. Increasing stiffness or torque raises impact, pinch, overheating, and drivetrain-load
+risk; test changes without the saber first and keep an accessible power disconnect.
+
+## Encoder wraparound hold
+
+FencingArm enables `wraparound_protection` by default for the Feetech encoders' 0–4095 position range. It
+detects abrupt transitions between a high region (4095 side) and a low region (0 side).
+
+When a joint reports a wrap such as `4095 → 0`:
+
+1. Motor torque remains enabled.
+2. The controller stops sending new goals, so the servos continue holding the last safe goal.
+3. The affected observation is frozen at its last safe value so a policy does not see a false 4095-count jump.
+4. The motor's own position controller should return it toward the held goal.
+5. Once feedback crosses back and begins moving inward (`4095 → 4094…`), commands resume automatically.
+
+The inverse `0 → 4095` case behaves symmetrically and releases after returning across zero and moving inward
+(`0 → 1…`). The detection regions can be adjusted if necessary:
+
+```bash
+--robot.wrap_low_threshold=256 \
+--robot.wrap_high_threshold=3839
+```
+
+Keep a wide gap between the thresholds. Do not disable this protection merely to make a mechanically
+over-traveling joint continue moving; correct its calibration range or mechanical limits instead.
+
+## Cameras
+
+Camera configuration follows the standard LeRobot robot configuration. For example:
+
+```bash
+--robot.cameras="{\"front\": {\"type\": \"opencv\", \"index_or_path\": 0, \"width\": 640, \"height\": 480, \"fps\": 30}}"
+```
+
+Use `uv run lerobot-find-cameras` to identify available camera indices. Camera keys become observation keys,
+so keep the names and image settings unchanged across recording and evaluation.
+
+## Teleoperation and recording status
+
+FencingArm does not yet have a matching teleoperator class. A stock SO leader cannot be connected directly:
+it exposes six differently named actions, while FencingArm expects these five actions:
+
+```text
+shoulder_yaw.pos
+shoulder_pitch.pos
+elbow_pitch.pos
+elbow_roll.pos
+wrist_pitch.pos
+```
+
+Before using `lerobot-teleoperate` or collecting demonstrations with `lerobot-record`, add either:
+
+- a five-axis FencingArm leader/teleoperator that emits those exact keys, or
+- a processor that deliberately maps another input device onto those keys and handles the 2:1 shoulder ratio.
+
+Once a compatible teleoperator named `TELEOP_TYPE` exists, the command shape will be:
+
+```bash
+uv run lerobot-teleoperate \
+    --robot.type=fencing_arm \
+    --robot.port_1=COM4 \
+    --robot.port_2=COM3 \
+    --robot.id=fencing_arm_01 \
+    --robot.max_relative_target=5.0 \
+    --teleop.type=TELEOP_TYPE \
+    --teleop.port=TELEOP_PORT \
+    --teleop.id=fencing_leader_01 \
+    --fps=30
+```
+
+And recording will follow this pattern:
+
+```bash
+uv run lerobot-record \
+    --robot.type=fencing_arm \
+    --robot.port_1=COM4 \
+    --robot.port_2=COM3 \
+    --robot.id=fencing_arm_01 \
+    --robot.max_relative_target=5.0 \
+    --teleop.type=TELEOP_TYPE \
+    --teleop.port=TELEOP_PORT \
+    --teleop.id=fencing_leader_01 \
+    --dataset.repo_id=YOUR_USERNAME/fencing_arm_test \
+    --dataset.single_task="Perform a controlled fencing-arm movement" \
+    --dataset.num_episodes=10 \
+    --dataset.push_to_hub=false \
+    --fps=30
+```
+
+Do not record training data until joint directions, ranges, action keys, and the shoulder-pitch coordinate
+convention are finalized. Changing them later makes old datasets incompatible or semantically inconsistent.
+
+## Replay an existing compatible dataset
+
+Only replay a dataset recorded with the same five action keys and coordinate convention:
+
+```bash
+uv run lerobot-replay \
+    --robot.type=fencing_arm \
+    --robot.port_1=COM4 \
+    --robot.port_2=COM3 \
+    --robot.id=fencing_arm_01 \
+    --robot.max_relative_target=5.0 \
+    --dataset.repo_id=YOUR_USERNAME/fencing_arm_test \
+    --dataset.episode=0
+```
+
+Start with the weapon removed and be prepared to disconnect motor power. Replay reproduces recorded motion
+and can move immediately after connection.
+
+## Recommended development sequence
+
+1. Confirm power supply voltage/current capacity, grounding, controller selection, and emergency stop.
+2. Assign the five motor IDs and verify model detection.
+3. Calibrate conservative physical limits and inspect observations without commanding motion.
+4. Test one joint at a time with a small `max_relative_target`.
+5. Decide whether policies should use motor angles or physical output-joint angles.
+6. Add a URDF and kinematics using a 2:1 shoulder-pitch transmission.
+7. Implement a compatible teleoperator or action-mapping processor.
+8. Add cameras and collect short, low-speed datasets.
+9. Add joint-specific limits, velocity limits, and task-level safety constraints before fencing motions.
+
+## Current implementation boundaries
+
+- Control mode is joint-position control through the Feetech bus.
+- The arm has no gripper action.
+- The 2:1 ratio is recorded in configuration but is not automatically applied to actions or observations.
+- Calibration measures each joint's safe range; no joint is assumed to rotate continuously.
+- There is not yet a FencingArm URDF, inverse kinematics implementation, dedicated teleoperator, or
+  fencing-specific collision/speed controller.
+
+These boundaries are intentional starting points. Resolve the coordinate convention and safety requirements
+before building higher-speed motion, training policies, or mounting a fencing weapon.

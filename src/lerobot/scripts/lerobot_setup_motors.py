@@ -31,6 +31,7 @@ import draccus
 from lerobot.robots import (  # noqa: F401
     RobotConfig,
     bi_so_follower,
+    fencing_arm,
     koch_follower,
     lekiwi,
     make_robot_from_config,
@@ -58,6 +59,7 @@ COMPATIBLE_DEVICES = [
     "so100_leader",
     "so101_follower",
     "so101_leader",
+    "fencing_arm",
     "lekiwi",
     "sourccey",
 ]

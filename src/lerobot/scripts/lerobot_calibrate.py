@@ -38,6 +38,7 @@ from lerobot.robots import (  # noqa: F401
     RobotConfig,
     bi_openarm_follower,
     bi_so_follower,
+    fencing_arm,
     hope_jr,
     koch_follower,
     lekiwi,
@@ -88,7 +89,9 @@ def calibrate(cfg: CalibrateConfig):
     elif isinstance(cfg.device, TeleoperatorConfig):
         device = make_teleoperator_from_config(cfg.device)
 
+    logging.info(f"Connecting to {cfg.device.type} on {getattr(cfg.device, 'port', 'configured interface')}...")
     device.connect(calibrate=False)
+    logging.info("Connected. Starting calibration...")
 
     try:
         device.calibrate()

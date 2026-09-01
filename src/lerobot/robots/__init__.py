@@ -14,10 +14,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import TYPE_CHECKING
+
 from .config import RobotConfig
 from .robot import Robot
 from .utils import make_robot_from_config
 
-# Import sourccey robots
-from .sourccey.sourccey.sourccey.sourccey import Sourccey
-from .sourccey.sourccey.sourccey_follower.sourccey_follower import SourcceyFollower
+if TYPE_CHECKING:
+    from .sourccey.sourccey.sourccey.sourccey import Sourccey
+    from .sourccey.sourccey.sourccey_follower.sourccey_follower import SourcceyFollower
+
+
+def __getattr__(name: str):
+    """Load Sourccey exports only when that optional robot is requested."""
+    if name == "Sourccey":
+        from .sourccey.sourccey.sourccey.sourccey import Sourccey
+
+        return Sourccey
+    if name == "SourcceyFollower":
+        from .sourccey.sourccey.sourccey_follower.sourccey_follower import SourcceyFollower
+
+        return SourcceyFollower
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

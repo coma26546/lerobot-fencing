@@ -97,6 +97,8 @@
     title: Action Representations
   title: "Robot Processors"
 - sections:
+  - local: fencing_arm
+    title: FencingArm
   - local: so101
     title: SO-101
   - local: so100
