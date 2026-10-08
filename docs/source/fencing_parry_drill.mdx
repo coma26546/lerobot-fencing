@@ -1,0 +1,142 @@
+# Retreat, parry 3, and optional parry 4 / cut 5
+
+This session uses the combined [FencingRobot](./fencing_robot). Each repetition:
+
+1. Waits for `s` followed by Enter.
+2. On the first repetition, moves to the saved `enguard` move.
+3. Retreats while taking the saved `parry3` move, opening the 4 line.
+4. Waits the configured attack delay, then starts a fixed exchange window.
+5. Uses a hidden, independent 50/50 choice: hold parry 3 without another arm
+   action, or take `parry4` and riposte with `cut5`.
+6. Leaves the remainder of the exchange window for the fencer to finish. In the
+   riposte branch, the fencer counterparries 5 and ripostes.
+7. Stops the wheels and prompts for reset or end.
+
+There is no hit sensor in this version. A hit does not trigger an early stop or
+automatic reset; the fixed window ends the repetition. On the hold branch the
+fencer can land the attack, then wait for the reset prompt. The program does not
+score hits or decide who won. The branch is reported after the window, not
+announced before the attack.
+
+## Keyboard controls
+
+| Command (followed by Enter) | Behavior |
+| --- | --- |
+| `s` or `start` | Start a repetition at the ready prompt |
+| `r` or `reset` | Return to the initial wheel encoder position and standby move, at the completed-rep prompt |
+| `q`, `quit`, `end`, or `stop` | End the session, including during motion |
+| Ctrl+C | Abort with hardware cleanup |
+
+After reset, the robot stops and awaits a **separate** start command. It never
+automatically starts the next repetition. Ending the session stops and closes
+hardware without driving home. Start/reset commands entered during motion or
+before the appropriate prompt are discarded. Keyboard input runs separately
+from the motion loop, so `q` is polled during movement; it is a software exit,
+not a physical emergency stop.
+
+## Drill configuration
+
+Edit `examples/fencing_robot/retreat_parry3.json`. Move names use your existing
+saved moves: `enguard`, `parry3`, `parry4`, and `cut5`. Change the names if your
+saved moves use other names. Names may refer to a recorded demonstration, a
+keyframe motion, or a single pose. Lookup priority matches the arm console:
+recording, keyframe motion, then pose. No calibration or recording is performed
+by the drill.
+
+Recorded moves preserve trimming, playback speed, smoothing and joint delays.
+Keyframe motions preserve easing and joint timing. Single poses use smoothstep.
+An optional `duration_s` in a move's settings overrides its overall duration;
+otherwise recordings use their stored timing, keyframes use their saved
+durations, and untimed keyframes/poses use `pose_transition_s`.
+
+For example:
+
+```json
+"parry4": {"name": "parry4", "duration_s": 0.6}
+```
+
+Wheel movement and drill timing live in this drill file:
+
+| Setting | Meaning / initial example |
+| --- | --- |
+| `retreat_speed` | Positive magnitude in encoder counts/s; backwards commands use its negative, initially 100 |
+| `retreat_duration_s` | Duration of wheel retreat starting with parry 3, initially 1 s |
+| `attack_delay_s` | Delay after retreat/parry 3 completes before the robot's response, initially 0.5 s |
+| `exchange_window_s` | Fixed duration covering the response and fencer's finish, initially 4 s |
+| `riposte_pause_s` | Pause between parry 4 and cut 5, initially 0.1 s |
+| `riposte_probability` | 0.5 for independent 50/50 choices |
+| `hz` | Shared command loop rate, initially 40 Hz |
+| `arm_max_step` | Maximum joint target change per tick in the configured arm coordinates |
+| `arm_tolerance` | Feedback tolerance used to confirm an arm move has completed |
+| `arm_settle_timeout_s` | Additional completion allowance per move, initially 1 s |
+| `return_speed` | Maximum reset wheel speed in counts/s, initially 100 |
+| `return_tolerance_counts` | Encoder error allowed at home, initially 10 counts |
+| `return_timeout_s` | Maximum duration of wheel return, initially 15 s |
+| `return_stall_timeout_s` | Time without encoder progress before aborting, initially 2 s |
+| `max_return_counts` | Maximum permitted encoder error during return, initially 10000 counts |
+
+The wheels stop when the retreat duration expires even if the arm is still
+finishing parry 3. During parry 4 and cut 5 the base is stationary. Arm and wheel
+commands share one loop during the retreat; no blocking arm playback routine
+runs alongside a wheel timer. The configured maximum arm step also applies
+to recorded moves. If it makes a move too slow, allow more time rather than
+assuming the recorded timing can always be achieved.
+
+Preflight resolves and validates every move before connecting hardware. The
+exchange window must accommodate the stored parry 4 and cut 5 durations, the
+pause, and both settling allowances. If your recordings are longer, increase
+`exchange_window_s` or deliberately adjust move durations. Physical motion is
+checked while running: an arm that fails to reach its target aborts the session.
+
+## Run on the Pi
+
+Use your existing arm ID, port paths, calibration settings and verified wheel
+mapping/signs from the whole-robot guide:
+
+```bash
+uv sync --extra feetech --extra roboclaw
+uv run --extra feetech --extra roboclaw lerobot-fencing-robot-session \
+  --robot.id=fencer \
+  --robot.arm.id=YOUR_EXISTING_ARM_ID \
+  --robot.arm.port_1=/dev/serial/by-id/YOUR_FIRST_ARM_BUS \
+  --robot.arm.port_2=/dev/serial/by-id/YOUR_SECOND_ARM_BUS \
+  --robot.drive.port=/dev/ttyACM0 \
+  --drill=examples/fencing_robot/retreat_parry3.json \
+  --dry_run=true
+```
+
+Add your wheel sign and mapping options where needed. Dry run checks saved move
+files and timing without opening ports or starting the keyboard reader. After
+validation and initial physical testing, use the same command with
+`--dry_run=false`. Once connected, the robot holds its current arm position and
+waits for `s`; the initial standby movement starts only after that command.
+
+## Return to the start
+
+The session saves both starting wheel encoder counts before the first rep and
+does not reset the controller's encoders. On `r`, the arm first returns to its
+saved standby move with the wheels stopped. Then each wheel moves toward its
+original count with a bounded speed that slows near the target. The wheel
+controller's existing tuned velocity PID stays unchanged. A wheel already in
+tolerance stops while the other finishes; small reverse corrections are possible
+after overshoot. There are no intentional chassis turns in this drill.
+
+Return is based on wheel rotation, not external chassis localization. Wheel
+slip or uneven traction can leave the chassis displaced even when counts match.
+Verify physical position during initial tests. Excessive return distance,
+failure to make encoder progress, communication failures, or a timeout abort
+the session and attempt hardware cleanup. Configured return limits must match
+your encoder resolution and actual retreat distance.
+
+The session returns to the saved standby arm move, not an arbitrary arm pose
+present when the program was launched. Default disconnect disables arm torque;
+support the arm when ending. The existing wheel watchdog and physical emergency
+stop remain necessary for failures that cannot be handled in software.
+
+## Future remote input
+
+`ParryDrillSession` accepts a `CommandSource` with a nonblocking `poll()` method.
+Return `"s"`, `"r"`, `"q"`, or `None` when there is no command. A microcontroller
+adapter can implement that interface without changing the drill state flow or
+movement code. `KeyboardCommands` is the current implementation. There is no
+microcontroller serial protocol or hit-sensor adapter in this version.

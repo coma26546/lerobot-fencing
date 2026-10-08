@@ -540,6 +540,9 @@ and can move immediately after connection.
 
 ## Current implementation boundaries
 
+For the chassis, see the separate [RoboClaw drive base](./roboclaw) backend and Pi test commands.
+For combined control and scripted drills, see [Fencing robot](./fencing_robot).
+
 - Control mode is joint-position control through the Feetech bus.
 - The arm has no gripper action.
 - The 2:1 ratio is recorded in configuration but is not automatically applied to actions or observations.

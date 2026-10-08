@@ -1,0 +1,11 @@
+{
+  "duration_s": 3.0,
+  "steps": [
+    {"time_s": 0.0, "pose": "enguard", "transition_s": 0.5},
+    {"time_s": 0.5, "left_speed": 100, "right_speed": 100},
+    {"time_s": 1.0, "pose": "parry", "left_speed": 100, "right_speed": 100, "transition_s": 0.5},
+    {"time_s": 1.5},
+    {"time_s": 2.0, "left_speed": -100, "right_speed": -100},
+    {"time_s": 2.5, "pose": "enguard", "transition_s": 0.5}
+  ]
+}

@@ -258,6 +258,18 @@ wheels = [
 ]
 
 [[package]]
+name = "basicmicro"
+version = "2.0.10"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyserial" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/72/b1/77981edeaa3f02c2f0fa81bdfca3480af95691f787cbe00da873407ec5bf/basicmicro-2.0.10.tar.gz", hash = "sha256:ecb7373151d2d1c349df2f419a9b4aacd28144eff65b1e4629f2ff1dacd8fbc8", size = 33139, upload-time = "2025-07-18T00:46:00.535Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/76/3d/2a3b699026a07194e5e8dea7743e168538dcef3d5aa43c0e7bc2d8f7dea4/basicmicro-2.0.10-py3-none-any.whl", hash = "sha256:d97e3d579aea4f4623e12a88209f79e3f1ce2eb8fa3983caa23852bec17de3ef", size = 31145, upload-time = "2025-07-18T00:45:58.307Z" },
+]
+
+[[package]]
 name = "bddl"
 version = "1.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2332,6 +2344,7 @@ dependencies = [
 [package.optional-dependencies]
 all = [
     { name = "accelerate" },
+    { name = "basicmicro" },
     { name = "contourpy" },
     { name = "debugpy" },
     { name = "dynamixel-sdk" },
@@ -2497,6 +2510,9 @@ qwen-vl-utils-dep = [
 reachy2 = [
     { name = "reachy2-sdk" },
 ]
+roboclaw = [
+    { name = "basicmicro" },
+]
 robstride = [
     { name = "python-can" },
 ]
@@ -2577,6 +2593,7 @@ requires-dist = [
     { name = "accelerate", specifier = ">=1.10.0,<2.0.0" },
     { name = "accelerate", marker = "extra == 'smolvla'", specifier = ">=1.7.0,<2.0.0" },
     { name = "av", specifier = ">=15.0.0,<16.0.0" },
+    { name = "basicmicro", marker = "extra == 'roboclaw'", specifier = ">=2.0.0,<3.0.0" },
     { name = "cmake", specifier = ">=3.29.0.1,<4.2.0" },
     { name = "contourpy", marker = "extra == 'matplotlib-dep'", specifier = ">=1.3.0,<2.0.0" },
     { name = "ctranslate2", marker = "sys_platform == 'win32' and extra == 'sourccey-desktop'", specifier = "==4.6.3" },
@@ -2649,6 +2666,7 @@ requires-dist = [
     { name = "lerobot", extras = ["qwen-vl-utils-dep"], marker = "extra == 'sarm'" },
     { name = "lerobot", extras = ["qwen-vl-utils-dep"], marker = "extra == 'wallx'" },
     { name = "lerobot", extras = ["reachy2"], marker = "extra == 'all'" },
+    { name = "lerobot", extras = ["roboclaw"], marker = "extra == 'all'" },
     { name = "lerobot", extras = ["sarm"], marker = "extra == 'all'" },
     { name = "lerobot", extras = ["scipy-dep"], marker = "extra == 'aloha'" },
     { name = "lerobot", extras = ["scipy-dep"], marker = "extra == 'libero'" },
@@ -2734,7 +2752,7 @@ requires-dist = [
     { name = "vosk", marker = "sys_platform != 'darwin' and sys_platform != 'win32' and extra == 'sourccey'", specifier = ">=0.3.45" },
     { name = "wandb", specifier = ">=0.24.0,<0.25.0" },
 ]
-provides-extras = ["pygame-dep", "placo-dep", "transformers-dep", "grpcio-dep", "can-dep", "peft-dep", "scipy-dep", "qwen-vl-utils-dep", "matplotlib-dep", "feetech", "dynamixel", "damiao", "robstride", "openarms", "gamepad", "hopejr", "lekiwi", "unitree-g1", "reachy2", "sourccey", "sourccey-desktop", "kinematics", "intelrealsense", "phone", "wallx", "pi", "smolvla", "multi-task-dit", "groot", "sarm", "xvla", "hilserl", "async", "peft", "dev", "test", "video-benchmark", "aloha", "pusht", "libero", "metaworld", "all"]
+provides-extras = ["pygame-dep", "placo-dep", "transformers-dep", "grpcio-dep", "can-dep", "peft-dep", "scipy-dep", "qwen-vl-utils-dep", "matplotlib-dep", "feetech", "roboclaw", "dynamixel", "damiao", "robstride", "openarms", "gamepad", "hopejr", "lekiwi", "unitree-g1", "reachy2", "sourccey", "sourccey-desktop", "kinematics", "intelrealsense", "phone", "wallx", "pi", "smolvla", "multi-task-dit", "groot", "sarm", "xvla", "hilserl", "async", "peft", "dev", "test", "video-benchmark", "aloha", "pusht", "libero", "metaworld", "all"]
 
 [[package]]
 name = "lgpio"

@@ -44,6 +44,10 @@ def make_robot_from_config(config: RobotConfig) -> Robot:
         from .fencing_arm import FencingArm
 
         return FencingArm(config)
+    elif config.type == "fencing_robot":
+        from .fencing_robot import FencingRobot
+
+        return FencingRobot(config)
     elif config.type == "lekiwi":
         from .lekiwi import LeKiwi
 

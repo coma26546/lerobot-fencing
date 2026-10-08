@@ -1,0 +1,87 @@
+# RoboClaw drive base
+
+The wheel backend is independent of `FencingArm`. It uses the current
+`basicmicro` package and the RoboClaw's existing velocity PID tuning. No PID
+parameters or persistent controller settings are written.
+
+## Install on the Raspberry Pi
+
+From this repository, use its environment instead of `~/roboclaw-env`:
+
+```bash
+uv sync --extra roboclaw --extra feetech
+uv run --extra roboclaw lerobot-roboclaw status
+```
+
+Defaults match the tested Pi connection: `/dev/ttyACM0`, baud `38400`, address
+`0x80`. Use `--port`, `--baud`, and `--address` to override them. Only one process
+may use this serial port at a time. If access is denied, add your Pi user to
+the `dialout` group and log out and back in.
+
+## Test wheel directions
+
+Start with the wheels lifted clear of the ground. M1 defaults to the left wheel,
+M2 to the right. Set `--left-motor 2` if wired the other way. Positive wheel
+speed means forward; use `--m1-sign -1` or `--m2-sign -1` to correct mounting
+direction. Apply the same options to every command or put them in your Python
+configuration.
+
+```bash
+uv run --extra roboclaw lerobot-roboclaw wheels --left-speed 100 --duration 1
+uv run --extra roboclaw lerobot-roboclaw wheels --right-speed 100 --duration 1
+uv run --extra roboclaw lerobot-roboclaw forward --speed 100 --duration 1
+uv run --extra roboclaw lerobot-roboclaw backward --speed 100 --duration 1
+uv run --extra roboclaw lerobot-roboclaw left --speed 100 --duration 1
+uv run --extra roboclaw lerobot-roboclaw right --speed 100 --duration 1
+uv run --extra roboclaw lerobot-roboclaw stop
+```
+
+Speeds are **encoder counts per second**, not duty values or metres per second.
+The CLI defaults to 100 counts/s for one second and rejects values beyond the
+configured limit (500 counts/s by default). These are initial testing values;
+actual ground speed depends on encoder resolution, gearing and wheel diameter.
+Raise `--max-speed` deliberately once the physical behavior is established.
+`status` also commands zero speed when connecting.
+
+## Use from your code
+
+```python
+import time
+from lerobot.robots.roboclaw import RoboClawDrive, RoboClawDriveConfig
+
+config = RoboClawDriveConfig(left_motor=1, m1_sign=1, m2_sign=1, max_speed=500)
+with RoboClawDrive(config) as drive:
+    deadline = time.monotonic() + 1.0
+    try:
+        while time.monotonic() < deadline:
+            drive.set_wheel_speeds(100, 100)
+            # Arm commands can be issued in this same loop.
+            time.sleep(1 / 40)
+    finally:
+        drive.stop()
+    print(drive.get_encoders())  # {"left": count, "right": count}
+    print(drive.get_speeds())    # signed counts/s in the same wheel coordinates
+```
+
+`forward`, `backward`, `rotate_left`, and `rotate_right` are convenience methods
+for wheel speeds. Commands return after serial acknowledgement; they do not
+wait for a movement to finish. Refresh motion commands before the default
+0.5-second command timeout. The software watchdog commands zero on stale motion,
+but the connection remains available for subsequent commands. Telemetry reads
+do not refresh the motion timeout. Failed reads, failed commands and invalid
+speed requests attempt a stop. Watchdog communication failures require reconnecting.
+
+`connect()` opens the port, stops both motors and checks firmware communication.
+`disconnect()` stops before closing, and the context manager handles exceptions.
+`reset_encoders()` explicitly stops before resetting both encoders; connecting
+does not reset them. `get_version()` and `get_battery_voltage()` provide diagnostics.
+Use the context manager or `try/finally` for every motion program. The CLI handles
+Ctrl+C and SIGTERM. A software stop cannot guarantee stopping after USB loss,
+power failure, SIGKILL, or process termination that bypasses cleanup; use a
+physical emergency stop and configure the controller's serial timeout separately.
+
+The [Fencing robot](./fencing_robot) composes this backend with the arm and
+provides combined actions and a scripted drill runner. This wheel module
+remains independently usable.
+
+Library reference: [BasicMicro Python library](https://github.com/basicmicro/basicmicro_python).

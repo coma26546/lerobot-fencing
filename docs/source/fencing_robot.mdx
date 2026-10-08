@@ -1,0 +1,178 @@
+# Fencing robot: arm and drive base
+
+`FencingRobot` combines the existing [FencingArm](./fencing_arm) and
+[RoboClaw drive base](./roboclaw) into one LeRobot-compatible robot. Each keeps
+its hardware backend: Feetech receives joint positions and RoboClaw receives
+wheel velocities. One control loop can command both without waiting for either
+movement to finish. Serial writes are sequential; this is coordinated timing,
+not a hard real-time guarantee or an atomic command to both controllers.
+
+## Pi setup
+
+From the repository on the Pi:
+
+```bash
+uv sync --extra feetech --extra roboclaw
+```
+
+Keep the RoboClaw's existing velocity PID tuning. Verify its wheel mapping and
+direction signs using the wheel-only guide before combined motion. Use distinct
+ports for both Feetech buses and RoboClaw. Prefer stable `/dev/serial/by-id/...`
+device paths because `/dev/ttyACM*` numbering may change after reconnecting.
+
+The combined config has `arm` and `drive` sections. **Set `arm.id` to the same
+ID you already use for the arm.** Its calibration and saved poses stay in the
+arm's existing directory. The combined `id` identifies the overall robot;
+it does not replace the arm ID. Preserve any custom `arm.calibration_dir`,
+`arm.pose_dir`, joint-coordinate settings and safety settings as well.
+
+```python
+from lerobot.robots.fencing_arm import FencingArmConfig
+from lerobot.robots.fencing_robot import FencingRobot, FencingRobotConfig
+from lerobot.robots.roboclaw import RoboClawDriveConfig
+
+config = FencingRobotConfig(
+    id="fencer",
+    arm=FencingArmConfig(
+        id="YOUR_EXISTING_ARM_ID",
+        port_1="/dev/serial/by-id/YOUR_FIRST_ARM_BUS",
+        port_2="/dev/serial/by-id/YOUR_SECOND_ARM_BUS",
+    ),
+    drive=RoboClawDriveConfig(
+        port="/dev/ttyACM0",
+        baud=38400,
+        address=0x80,
+        left_motor=1,
+        m1_sign=1,
+        m2_sign=1,
+        max_speed=500,
+    ),
+)
+robot = FencingRobot(config)
+```
+
+Replace the arm port and ID placeholders with your actual values. The wheel
+signs above are examples; use the signs established during your wheel tests.
+
+## Combined actions and observations
+
+Arm action keys retain their existing meanings:
+
+| Key | Meaning |
+| --- | --- |
+| `shoulder_yaw.pos` | Arm joint target |
+| `shoulder_pitch.pos` | Arm joint target |
+| `elbow_pitch.pos` | Arm joint target |
+| `elbow_roll.pos` | Arm joint target |
+| `wrist_pitch.pos` | Arm joint target |
+| `base.left_speed` | Left wheel encoder counts per second |
+| `base.right_speed` | Right wheel encoder counts per second |
+
+Wheel speeds are positive forward. The combined interface accepts finite numeric
+velocities and rounds them to integer counts/s for RoboClaw. Values outside
+`drive.max_speed` are rejected before either subsystem receives an action.
+Arm targets follow `arm.use_degrees` and existing arm safety handling.
+
+`send_action()` returns the arm targets actually sent plus both wheel commands.
+Missing wheel keys default to zero on each call, so an arm-only command stops
+the wheels. Missing arm joints retain their last goals. Unknown keys and
+nonfinite values are rejected. Refresh wheel commands faster than
+`drive.command_timeout_s` (0.5 seconds by default).
+
+`get_observation()` returns arm joint positions and configured camera images,
+plus `base.left_speed`, `base.right_speed`, `base.left_encoder`,
+`base.right_encoder`, and `base.battery_voltage`. Speed observations are signed
+counts/s; encoder counts are signed counts in the configured wheel coordinates.
+These are wheel measurements, not chassis position or odometry.
+
+## Run a combined drill
+
+For the interactive retreat/parry 3 drill with random hold or parry 4 / cut 5
+responses and keyboard start/reset/end controls, see [Fencing parry drill](./fencing_parry_drill).
+
+The runner resolves all saved poses and validates the complete schedule before
+connecting hardware. It uses one monotonic loop, 40 Hz by default, interpolating
+arm targets with smoothstep while refreshing wheel velocities each tick.
+It skips missed ticks rather than issuing a burst of late commands.
+If the loop reaches the end before processing all scheduled steps, it aborts
+and cleans up instead of issuing those steps after the drill.
+
+The example at `examples/fencing_robot/advance_retreat.json` uses saved poses
+named `enguard` and `parry`. Edit these names to match poses you have recorded.
+The drill advances, changes the arm pose while advancing, stops, retreats, then
+returns to the initial pose. Each step's wheel speeds replace the previous
+speeds; omitted speeds mean zero. A step without a pose keeps the arm transition
+or goal. `transition_s` is the arm transition duration and defaults to 0.5.
+
+First validate without opening serial ports:
+
+```bash
+uv run --extra feetech --extra roboclaw lerobot-fencing-robot-run-drill \
+  --robot.id=fencer \
+  --robot.arm.id=YOUR_EXISTING_ARM_ID \
+  --robot.arm.port_1=/dev/serial/by-id/YOUR_FIRST_ARM_BUS \
+  --robot.arm.port_2=/dev/serial/by-id/YOUR_SECOND_ARM_BUS \
+  --robot.drive.port=/dev/ttyACM0 \
+  --drill=examples/fencing_robot/advance_retreat.json \
+  --dry_run=true
+```
+
+Pass any needed `--robot.drive.m1_sign`, `--robot.drive.m2_sign`, and
+`--robot.drive.left_motor` options. After validation and physical setup, run the
+same command with `--dry_run=false`. Dry run checks the schedule, configuration,
+and saved pose files; it does not check physical limits or hardware readiness.
+
+From Python, using the config above:
+
+```python
+from lerobot.robots.fencing_robot.drills import DrillStep, run_drill
+
+steps = [
+    DrillStep(0.0, pose="enguard", transition_s=0.5),
+    DrillStep(0.5, left_speed=100, right_speed=100),
+    DrillStep(1.0, pose="parry", left_speed=100, right_speed=100),
+    DrillStep(1.5),
+    DrillStep(2.0, left_speed=-100, right_speed=-100),
+    DrillStep(2.5, pose="enguard", transition_s=0.5),
+]
+with robot:
+    run_drill(robot, steps, duration_s=3.0, hz=40)
+```
+
+The runner requires a step at time zero, strictly increasing times, and pose
+transitions that finish before the next pose or the end. Wheel-only steps may
+occur during an arm transition. The final arm target and zero wheel speeds
+are commanded before completion.
+
+## Connection and shutdown behavior
+
+`connect()` stops the wheels first, connects the arm with torque disabled,
+checks or runs arm calibration, then sets current arm positions as goals before
+enabling torque. Support the arm during calibration and initial setup.
+`connect(calibrate=False)` leaves the arm passive for calibration workflows;
+explicitly call `robot.arm.prepare_for_motion()` before commanding motion after
+using that mode. Calibrate the arm through its existing guide or use
+`lerobot-calibrate --robot.type=fencing_robot` with the same nested arm/drive
+configuration. Wheel PID tuning is never changed.
+
+`stop()` stops the chassis and leaves the arm holding its last goal.
+`disconnect()` attempts wheel stop/close first, then closes both arm buses and
+cameras even if another cleanup step fails. Arm torque follows
+`arm.disable_torque_on_disconnect`, which defaults to true; support the arm
+when ending a drill. Failed actions, failed observations, and failed connections
+attempt full cleanup and require reconnecting. The context manager cleans up
+on exceptions, and the drill CLI handles Ctrl+C and SIGTERM.
+
+The wheel watchdog is a software safeguard; it does not stop the arm. USB loss,
+power loss, SIGKILL or forced termination can bypass software stopping. Keep
+the controller's serial timeout and a physical emergency stop available.
+
+## LeRobot integration boundaries
+
+The robot is registered as `fencing_robot` and supported by the robot factory,
+calibration, recording, and teleoperation entry points. A teleoperator or policy
+must produce wheel commands as well as arm targets to move the chassis;
+existing arm-only teleoperators leave wheels at zero. A matching processor or
+teleoperator for combined driving is still needed for manual combined data
+collection. Scripted drills are available now; this change adds no learned
+policy, chassis odometry, collision avoidance, or kinematics.

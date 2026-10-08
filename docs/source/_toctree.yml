@@ -99,6 +99,12 @@
 - sections:
   - local: fencing_arm
     title: FencingArm
+  - local: fencing_robot
+    title: Fencing robot (arm and drive)
+  - local: fencing_parry_drill
+    title: Fencing retreat/parry drill session
+  - local: roboclaw
+    title: RoboClaw drive base
   - local: so101
     title: SO-101
   - local: so100

@@ -1,0 +1,22 @@
+{
+  "standby": {"name": "enguard"},
+  "parry3": {"name": "parry3"},
+  "parry4": {"name": "parry4"},
+  "cut5": {"name": "cut5"},
+  "retreat_speed": 100,
+  "retreat_duration_s": 1.0,
+  "attack_delay_s": 0.5,
+  "exchange_window_s": 4.0,
+  "riposte_pause_s": 0.1,
+  "riposte_probability": 0.5,
+  "hz": 40.0,
+  "pose_transition_s": 0.5,
+  "arm_max_step": 6.0,
+  "arm_tolerance": 2.0,
+  "arm_settle_timeout_s": 1.0,
+  "return_speed": 100,
+  "return_tolerance_counts": 10,
+  "return_timeout_s": 15.0,
+  "return_stall_timeout_s": 2.0,
+  "max_return_counts": 10000
+}
