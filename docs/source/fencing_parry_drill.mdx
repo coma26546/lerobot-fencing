@@ -90,18 +90,19 @@ checked while running: an arm that fails to reach its target aborts the session.
 
 ## Run on the Pi
 
-Use your existing arm ID, port paths, calibration settings and verified wheel
-mapping/signs from the whole-robot guide:
+The session config at `examples/fencing_robot/retreat_parry3_session.json` uses
+the verified persistent USB paths for arm motors 1–2 (`port_1`), arm motors
+3–5 (`port_2`), and RoboClaw. These identify the controllers independently of
+their current `/dev/ttyACM*` numbers.
+The arm ID is `fencing_arm_01`, matching the arm guide; use the ID associated
+with your existing calibration and saved moves. Preserve any custom calibration, pose-directory, and wheel
+mapping/sign settings from the whole-robot guide.
 
 ```bash
 uv sync --extra feetech --extra roboclaw
 uv run --extra feetech --extra roboclaw lerobot-fencing-robot-session \
-  --robot.id=fencer \
-  --robot.arm.id=YOUR_EXISTING_ARM_ID \
-  --robot.arm.port_1=/dev/serial/by-id/YOUR_FIRST_ARM_BUS \
-  --robot.arm.port_2=/dev/serial/by-id/YOUR_SECOND_ARM_BUS \
-  --robot.drive.port=/dev/ttyACM0 \
-  --drill=examples/fencing_robot/retreat_parry3.json \
+  --config_path=examples/fencing_robot/retreat_parry3_session.json \
+  --robot.arm.id=fencing_arm_01 \
   --dry_run=true
 ```
 
@@ -110,6 +111,32 @@ files and timing without opening ports or starting the keyboard reader. After
 validation and initial physical testing, use the same command with
 `--dry_run=false`. Once connected, the robot holds its current arm position and
 waits for `s`; the initial standby movement starts only after that command.
+
+### Keep the ports stable after reboot
+
+Linux assigns `/dev/ttyACM*` numbers as devices are discovered, so those numbers
+can change on reboot or reconnect. Use persistent serial symlinks in the session
+config instead. On the Pi, with the current mapping still verified, run:
+
+```bash
+ls -l /dev/serial/by-id/
+ls -l /dev/serial/by-path/
+```
+
+Find the symlink pointing to `ttyACM2` and copy its full `/dev/serial/by-id/...`
+path into `robot.arm.port_1`; do the same for `ttyACM1` into `robot.arm.port_2`
+and `ttyACM0` into `robot.drive.port`. Each device must have a distinct path.
+The drivers already accept these paths; no driver changes are needed.
+
+If the arm adapters have missing or duplicate USB serial IDs, use their distinct
+`/dev/serial/by-path/...` paths instead. These identify the physical USB connection:
+keep each adapter in the same Pi/hub socket and keep the hub connections unchanged.
+Do not create a manual symlink to a numbered `ttyACM` device; it would follow the
+number rather than the intended controller. Persistent symlinks are maintained by
+[systemd's serial udev rules](https://github.com/systemd/systemd/blob/main/rules.d/60-serial.rules).
+
+After reboot, check the symlinks again before running the drill. The numbered
+targets may change while the configured persistent names stay the same.
 
 ## Return to the start
 

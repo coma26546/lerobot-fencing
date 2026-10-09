@@ -1,0 +1,15 @@
+{
+  "robot": {
+    "id": "fencer",
+    "arm": {
+      "id": "fencing_arm_01",
+      "port_1": "/dev/serial/by-id/usb-1a86_USB_Single_Serial_5A7A058183-if00",
+      "port_2": "/dev/serial/by-id/usb-1a86_USB_Single_Serial_5A7A059299-if00"
+    },
+    "drive": {
+      "port": "/dev/serial/by-id/usb-Basicmicro_Inc._USB_Roboclaw_2x15A-if00"
+    }
+  },
+  "drill": "examples/fencing_robot/retreat_parry3.json",
+  "dry_run": true
+}
