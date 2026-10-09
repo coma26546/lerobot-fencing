@@ -4,7 +4,9 @@ This session uses the combined [FencingRobot](./fencing_robot). Each repetition:
 
 1. Waits for `s` followed by Enter.
 2. On the first repetition, moves to the saved `enguard` move.
-3. Retreats while taking the saved `parry3` move, opening the 4 line.
+3. Retreats one metre by wheel encoder feedback while taking the saved `parry3`
+   move, opening the 4 line. The example uses 1998 counts per wheel, based on
+   753.2 counts per output revolution and 120 mm wheels.
 4. Waits the configured attack delay, then starts a fixed exchange window.
 5. Uses a hidden, independent 50/50 choice: hold parry 3 without another arm
    action, or take `parry4` and riposte with `cut5`.
@@ -59,24 +61,31 @@ Wheel movement and drill timing live in this drill file:
 
 | Setting | Meaning / initial example |
 | --- | --- |
-| `retreat_speed` | Positive magnitude in encoder counts/s; backwards commands use its negative, initially 100 |
-| `retreat_duration_s` | Duration of wheel retreat starting with parry 3, initially 1 s |
+| `retreat_speed` | Maximum retreat speed in encoder counts/s, initially 400 (about 0.20 m/s) |
+| `retreat_distance_counts` | Encoder distance per wheel, initially 1998 (about 1 metre); omit for timed retreat |
+| `retreat_duration_s` | Wheel retreat duration when distance is omitted, initially 1 s |
+| `retreat_timeout_s` | Maximum distance-retreat duration, initially 30 s |
+| `retreat_stall_timeout_s` | Maximum time without encoder progress, initially 2 s |
 | `attack_delay_s` | Delay after retreat/parry 3 completes before the robot's response, initially 0.5 s |
-| `exchange_window_s` | Fixed duration covering the response and fencer's finish, initially 4 s |
+| `exchange_window_s` | Fixed duration covering the response and fencer's finish, initially 10 s; increase for longer saved recordings |
 | `riposte_pause_s` | Pause between parry 4 and cut 5, initially 0.1 s |
 | `riposte_probability` | 0.5 for independent 50/50 choices |
 | `hz` | Shared command loop rate, initially 40 Hz |
 | `arm_max_step` | Maximum joint target change per tick in the configured arm coordinates |
 | `arm_tolerance` | Feedback tolerance used to confirm an arm move has completed |
-| `arm_settle_timeout_s` | Additional completion allowance per move, initially 1 s |
-| `return_speed` | Maximum reset wheel speed in counts/s, initially 100 |
+| `arm_settle_timeout_s` | Additional completion allowance per move, initially 3 s |
+| `return_speed` | Maximum reset wheel speed in counts/s, initially 400 |
 | `return_tolerance_counts` | Encoder error allowed at home, initially 10 counts |
-| `return_timeout_s` | Maximum duration of wheel return, initially 15 s |
+| `return_timeout_s` | Maximum duration of wheel return, initially 30 s |
 | `return_stall_timeout_s` | Time without encoder progress before aborting, initially 2 s |
 | `max_return_counts` | Maximum permitted encoder error during return, initially 10000 counts |
 
-The wheels stop when the retreat duration expires even if the arm is still
-finishing parry 3. During parry 4 and cut 5 the base is stationary. Arm and wheel
+With distance retreat, each wheel slows near its encoder target and stops when
+it reaches it. Both wheels must finish and the arm must reach parry 3 before the
+attack delay and response begin. A stalled wheel or wrong encoder direction
+aborts the repetition. In timed mode, wheels stop when the retreat duration
+expires even if the arm is still finishing parry 3.
+During parry 4 and cut 5 the base is stationary. Arm and wheel
 commands share one loop during the retreat; no blocking arm playback routine
 runs alongside a wheel timer. The configured maximum arm step also applies
 to recorded moves. If it makes a move too slow, allow more time rather than

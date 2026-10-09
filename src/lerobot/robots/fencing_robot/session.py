@@ -70,6 +70,9 @@ class ParryDrill:
     cut5: MoveSettings = field(default_factory=lambda: MoveSettings("cut5"))
     retreat_speed: int = 100
     retreat_duration_s: float = 1.0
+    retreat_distance_counts: int | None = None
+    retreat_timeout_s: float = 30.0
+    retreat_stall_timeout_s: float = 2.0
     attack_delay_s: float = 0.5
     exchange_window_s: float = 4.0
     riposte_pause_s: float = 0.1
@@ -88,6 +91,8 @@ class ParryDrill:
     def validate(self, robot: FencingRobot) -> None:
         for name in (
             "retreat_duration_s",
+            "retreat_timeout_s",
+            "retreat_stall_timeout_s",
             "exchange_window_s",
             "pose_transition_s",
             "arm_max_step",
@@ -121,6 +126,11 @@ class ParryDrill:
         for move in (self.standby, self.parry3, self.parry4, self.cut5):
             if move.duration_s is not None and (not math.isfinite(move.duration_s) or move.duration_s <= 0):
                 raise ValueError("Move duration_s must be finite and positive")
+        if self.retreat_distance_counts is not None and (
+            type(self.retreat_distance_counts) is not int
+            or not self.return_tolerance_counts < self.retreat_distance_counts <= self.max_return_counts
+        ):
+            raise ValueError("retreat_distance_counts must exceed tolerance and stay within max_return_counts")
 
 
 @dataclass
@@ -261,7 +271,19 @@ class ParryDrillSession:
         previous = dict(source)
         start = time.monotonic()
         motion_end = max(move.duration_s, self.drill.retreat_duration_s if retreat else 0)
+        distance_retreat = retreat and self.drill.retreat_distance_counts is not None
+        if distance_retreat:
+            encoders = self.robot.drive.get_encoders()
+            wheel_targets = {
+                wheel: value - self.drill.retreat_distance_counts for wheel, value in encoders.items()
+            }
+            best = dict.fromkeys(wheel_targets, math.inf)
+            progress_at = dict.fromkeys(wheel_targets, start)
+            wheel_done = dict.fromkeys(wheel_targets, False)
+            motion_end = move.duration_s
         limit = start + motion_end + self.drill.arm_settle_timeout_s
+        if distance_retreat:
+            limit = max(limit, start + self.drill.retreat_timeout_s)
         if deadline is not None:
             limit = min(limit, deadline)
         try:
@@ -277,9 +299,33 @@ class ParryDrillSession:
                 speed = (
                     -self.drill.retreat_speed if retreat and elapsed < self.drill.retreat_duration_s else 0
                 )
-                sent = self.robot.send_action({**action, "base.left_speed": speed, "base.right_speed": speed})
+                speeds = dict.fromkeys(("left", "right"), speed)
+                wheels_complete = True
+                if distance_retreat:
+                    encoders = self.robot.drive.get_encoders()
+                    now = time.monotonic()
+                    for wheel, target_count in wheel_targets.items():
+                        remaining = encoders[wheel] - target_count
+                        if remaining <= self.drill.return_tolerance_counts:
+                            wheel_done[wheel] = True
+                        if wheel_done[wheel]:
+                            speeds[wheel] = 0
+                            continue
+                        if now - start >= self.drill.retreat_timeout_s:
+                            raise TimeoutError("One-metre retreat exceeded its time limit")
+                        if remaining > self.drill.retreat_distance_counts + 20:
+                            raise RuntimeError(f"Wrong encoder direction while retreating {wheel} wheel")
+                        if remaining < best[wheel] - 1:
+                            best[wheel], progress_at[wheel] = remaining, now
+                        elif now - progress_at[wheel] >= self.drill.retreat_stall_timeout_s:
+                            raise TimeoutError(f"No encoder progress while retreating {wheel} wheel")
+                        speeds[wheel] = -min(self.drill.retreat_speed, max(1, round(remaining * 2)))
+                    wheels_complete = all(wheel_done.values())
+                sent = self.robot.send_action(
+                    {**action, "base.left_speed": speeds["left"], "base.right_speed": speeds["right"]}
+                )
                 previous = {key: float(sent[key]) for key in target}
-                if elapsed >= motion_end:
+                if elapsed >= motion_end and wheels_complete:
                     observation = self.robot.arm.get_observation()
                     if all(
                         abs(float(observation[key]) - target[key]) <= self.drill.arm_tolerance

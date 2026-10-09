@@ -118,6 +118,49 @@ def test_q_ends_without_returning_home(hardware):
     assert not any(action["base.left_speed"] > 0 for _, action in actions)
 
 
+def test_distance_retreat_finishes_before_riposte(hardware):
+    robot, commands, clock, encoders, position, actions = hardware
+    home = dict(encoders)
+    rng = MagicMock()
+    rng.random.return_value = 0
+    retreat_end = []
+
+    def announce(message):
+        if message.startswith("Ready:"):
+            commands.pending.append("s")
+        elif message.startswith("r +"):
+            commands.pending.append("q")
+
+    original_send = robot.send_action.side_effect
+
+    def send(action):
+        if action.get("shoulder_yaw.pos", 0) > 10:
+            retreat_end.append(dict(encoders))
+            assert action["base.left_speed"] == action["base.right_speed"] == 0
+        return original_send(action)
+
+    robot.send_action.side_effect = send
+    drill = ParryDrill(retreat_distance_counts=1998, retreat_speed=400)
+    ParryDrillSession(robot, drill, commands, rng, announce).run()
+    assert retreat_end
+    for wheel in home:
+        assert abs((home[wheel] - retreat_end[0][wheel]) - 1998) <= 11
+    assert clock[0] > 5
+
+
+def test_distance_retreat_stall_stops(hardware):
+    robot, commands, *_ = hardware
+    robot.drive.get_encoders.side_effect = None
+    robot.drive.get_encoders.return_value = {"left": 0, "right": 0}
+    session = ParryDrillSession(
+        robot, ParryDrill(retreat_distance_counts=1998, retreat_stall_timeout_s=0.1), commands
+    )
+    session.prepare()
+    with pytest.raises(TimeoutError, match="No encoder progress while retreating"):
+        session._move("parry3", retreat=True)
+    robot.stop.assert_called()
+
+
 def test_end_during_motion_stops(hardware):
     robot, commands, clock, encoders, position, actions = hardware
 
