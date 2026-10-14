@@ -43,6 +43,42 @@ actual ground speed depends on encoder resolution, gearing and wheel diameter.
 Raise `--max-speed` deliberately once the physical behavior is established.
 `status` also commands zero speed when connecting.
 
+## Wheel-only keyboard testing
+
+The arm can be disconnected for this script. Run in an interactive Pi terminal
+(including SSH); no desktop keyboard package is needed:
+
+```bash
+uv run --extra roboclaw examples/fencing_robot/wheel_keyboard.py
+```
+
+It defaults to the tested USB by-id path; pass `--port /dev/ttyACM0` if needed.
+Use your established `--left-motor`, `--m1-sign`, and `--m2-sign` settings.
+
+| Keys | Motion | Output |
+| --- | --- | --- |
+| W / S | Forward / backward | 400 encoder counts/s |
+| A / D | Rotate left / right | 400 encoder counts/s |
+| Up / Down | Forward / backward | Full motor power |
+| Left / Right | Rotate left / right | Full motor power |
+| Space | Stop | Zero speed |
+| Q / Esc / Ctrl+C | Stop and quit | Zero speed |
+
+Arrows use `DutyM1M2` at +/-32767 (100% duty), bypassing velocity PID control.
+This requests maximum output; battery, load and controller protections determine
+actual speed. It does not change stored PID settings or controller protections.
+Use `--fast-duty 16384` for approximately half power or `--speed 100` for slower WASD.
+Full power and abrupt reversals can damage the drivetrain; keep a physical power
+stop ready and use a clear testing area.
+
+Terminal input has no key-release events: taps produce short movements and holding
+a key repeats them. Motion stops after 0.2 seconds without another movement key;
+the initial keyboard repeat delay can cause a pause. `--hold-timeout` adjusts this
+between 0.05 and 0.5 seconds. Space takes priority over movement in the same input
+batch. Commands refresh at 40 Hz, with the backend's separate 0.5-second watchdog
+and context-manager cleanup. USB loss or a killed process still requires a
+controller serial timeout or physical stop.
+
 ## Use from your code
 
 ```python

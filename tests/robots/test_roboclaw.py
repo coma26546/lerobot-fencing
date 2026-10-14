@@ -42,6 +42,36 @@ def test_invalid_speed_stops(controller, left, right):
         controller.SpeedM1M2.assert_called_with(0x80, 0, 0)
 
 
+def test_full_duty_mapping_and_watchdog(controller):
+    with RoboClawDrive(
+        RoboClawDriveConfig(left_motor=2, m1_sign=-1, command_timeout_s=0.02)
+    ) as drive:
+        drive.set_wheel_duties(32767, -32767)
+        controller.DutyM1M2.assert_called_with(0x80, 32767, 32767)
+        deadline = time.monotonic() + 1
+        while drive._moving and time.monotonic() < deadline:
+            time.sleep(0.005)
+        assert not drive._moving
+        controller.SpeedM1M2.assert_called_with(0x80, 0, 0)
+
+
+@pytest.mark.parametrize("value", [32768, -32768, True, 1.0])
+def test_invalid_duty_stops(controller, value):
+    with RoboClawDrive() as drive:
+        drive.set_wheel_duties(32767, 32767)
+        with pytest.raises(ValueError):
+            drive.set_wheel_duties(value, 0)
+        controller.SpeedM1M2.assert_called_with(0x80, 0, 0)
+
+
+def test_failed_duty_stops(controller):
+    with RoboClawDrive() as drive:
+        controller.DutyM1M2.return_value = False
+        with pytest.raises(ConnectionError):
+            drive.set_wheel_duties(32767, 32767)
+        controller.SpeedM1M2.assert_called_with(0x80, 0, 0)
+
+
 def test_failed_command_and_read_stop(controller):
     with RoboClawDrive() as drive:
         controller.SpeedM1M2.side_effect = [False, True]

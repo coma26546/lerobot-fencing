@@ -143,6 +143,22 @@ class RoboClawDrive:
             self._last_command = time.monotonic()
             self._moving = bool(left or right)
 
+    def set_wheel_duties(self, left: int, right: int) -> None:
+        """Set raw motor power (-32767..32767), bypassing velocity PID control."""
+        with self._operation():
+            for value in (left, right):
+                if type(value) is not int or abs(value) > 32767:
+                    raise ValueError("Wheel duties must be integers within +/-32767")
+            m1, m2 = (left, right) if self.config.left_motor == 1 else (right, left)
+            self._check_ack(
+                self._controller.DutyM1M2(
+                    self.config.address, m1 * self.config.m1_sign, m2 * self.config.m2_sign
+                ),
+                "wheel duties",
+            )
+            self._last_command = time.monotonic()
+            self._moving = bool(left or right)
+
     def forward(self, speed: int) -> None:
         self.set_wheel_speeds(speed, speed)
 
