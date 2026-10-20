@@ -221,7 +221,9 @@ does not provide collision avoidance.
 Pose playback, telemetry playback, the interactive console, and both fencing drill commands require
 `rest` before starting. On normal completion (or `q` in the console), they lower to `rest` before
 disconnecting. The transition uses `smootherstep`, at least three seconds, 30 updates per second,
-and a maximum step of 1 motor-coordinate unit per update. Console moves still return to en garde
+and a maximum step of 1 motor-coordinate unit per update. Rest is accepted when every joint is
+within 5 motor-coordinate units (motor degrees with the default configuration) of the saved pose.
+Console moves still return to en garde
 between actions; lowering happens when the console exits.
 
 Ctrl+C and errors retain immediate hardware cleanup without an additional commanded movement.

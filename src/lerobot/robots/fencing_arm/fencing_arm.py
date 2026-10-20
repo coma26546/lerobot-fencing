@@ -111,7 +111,7 @@ class FencingArm(SOFollower):
             max_step=1.0,
             fps=30.0,
             timeout_s=120.0,
-            tolerance=0.5,
+            tolerance=5.0,
             duration_s=3.0,
             easing="smootherstep",
         )
