@@ -23,6 +23,7 @@ def run(cfg: FencingSessionConfig) -> None:
     with cfg.drill.open(encoding="utf-8") as file:
         drill = draccus.decode(ParryDrill, json.load(file))
     robot = FencingRobot(cfg.robot)
+    robot.arm.pose_store.load("rest")
     # Preparation needs no keyboard thread and validates moves before any connection.
     session = ParryDrillSession(robot, drill, commands=None)
     session.prepare()
@@ -40,6 +41,8 @@ def run(cfg: FencingSessionConfig) -> None:
             commands = KeyboardCommands()
             session.commands = commands
             session.run()
+            robot.stop()
+            robot.arm.move_to_rest()
     except KeyboardInterrupt:
         print("Interrupted; hardware cleanup attempted.")
     finally:

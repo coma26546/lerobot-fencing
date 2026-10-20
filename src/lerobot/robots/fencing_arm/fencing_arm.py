@@ -104,6 +104,18 @@ class FencingArm(SOFollower):
         self.bus.enable_torque()
         return current_pose
 
+    def move_to_rest(self) -> None:
+        """Lower to the taught, mechanically supported rest pose before normal shutdown."""
+        self.move_to_pose(
+            "rest",
+            max_step=1.0,
+            fps=30.0,
+            timeout_s=120.0,
+            tolerance=0.5,
+            duration_s=3.0,
+            easing="smootherstep",
+        )
+
     def _update_wraparound_safety(self, raw_positions: dict[str, int | float]) -> None:
         if not self.config.wraparound_protection:
             return

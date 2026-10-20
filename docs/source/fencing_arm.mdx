@@ -201,6 +201,33 @@ match.
 > Torque turns off during recording, so gravity may make the arm drop immediately. Remove the weapon and
 > support the arm before running the command. Keep clear of pinch points.
 
+## Record a supported rest position
+
+Before running cuts or parries, record a single `rest` pose on the Pi:
+
+```bash
+uv run lerobot-fencing-arm-record-pose \
+    --robot.port_1=/dev/ttyACM2 \
+    --robot.port_2=/dev/ttyACM1 \
+    --robot.id=fencing_arm_01 \
+    --pose=rest
+```
+
+Torque is disabled while recording. Support the arm, lower it to a mechanically supported position
+that stays stable without motor torque, and press Enter. This replaces any previous `rest` pose.
+Choose a position with a clear approach from your cuts, parries, and en garde; a saved endpoint alone
+does not provide collision avoidance.
+
+Pose playback, telemetry playback, the interactive console, and both fencing drill commands require
+`rest` before starting. On normal completion (or `q` in the console), they lower to `rest` before
+disconnecting. The transition uses `smootherstep`, at least three seconds, 30 updates per second,
+and a maximum step of 1 motor-coordinate unit per update. Console moves still return to en garde
+between actions; lowering happens when the console exits.
+
+Ctrl+C and errors retain immediate hardware cleanup without an additional commanded movement.
+If lowering fails or times out, cleanup still runs and may release torque before reaching rest;
+keep the arm supported during initial testing. Recording commands do not automatically lower the arm.
+
 ## Stand by in en garde and execute a preset
 
 After both `enguard` and the desired motion have been recorded, run:
@@ -219,7 +246,8 @@ The command performs this sequence:
 2. Waits for confirmation, then approaches `enguard` in small increments.
 3. Holds en garde in standby until you press Enter.
 4. Executes every requested keyframe in its recorded order.
-5. Holds the final keyframe until you press Enter again, then disables torque and exits.
+5. Holds the final keyframe until you press Enter again, then gently moves to `rest`, disables torque,
+   and exits. With `--hold_at_target=false`, it starts lowering immediately after the move.
 
 Within each transition, all joints advance by the same percentage of their required travel. This keeps the
 joints synchronized instead of allowing short-distance joints to finish before long-distance joints.

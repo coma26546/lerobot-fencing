@@ -62,13 +62,13 @@ def record_pose(config: RecordPoseConfig) -> None:
         # Torque is already disabled, so record the actual position instead of
         # applying the runtime command-hold behavior.
         arm.config.wraparound_protection = False
-        if config.pose == "enguard":
+        if config.pose in {"enguard", "rest"}:
             input(
-                "Torque is OFF. Manually move the arm to pose 'enguard', support it securely, "
+                f"Torque is OFF. Manually move the arm to pose {config.pose!r}, support it securely, "
                 "then press ENTER to record."
             )
-            arm.record_pose("enguard")
-            print(f"Saved pose 'enguard' to {arm.pose_store.path}")
+            arm.record_pose(config.pose)
+            print(f"Saved pose {config.pose!r} to {arm.pose_store.path}")
         else:
             count = _prompt_keyframe_count(config.pose)
             keyframes = []
@@ -195,6 +195,7 @@ def _run_pose(
     _require_robot_id(config.robot)
     arm = FencingArm(config.robot)
     telemetry = None
+    arm.pose_store.load("rest")
     if telemetry_output_dir is not None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         run_dir = telemetry_output_dir / f"{config.pose}_{timestamp}"
@@ -261,7 +262,8 @@ def _run_pose(
             print(f"FencingArm completed preset {config.pose!r}.")
 
         if config.hold_at_target:
-            input("Holding position. Press ENTER to disable torque and exit.")
+            input("Holding position. Press ENTER to lower to rest, disable torque and exit.")
+        arm.move_to_rest()
     finally:
         arm.disconnect()
         if telemetry is not None:
@@ -304,6 +306,7 @@ def enguard_check(config: EnguardCheckConfig) -> None:
     _require_robot_id(config.robot)
     arm = FencingArm(config.robot)
     target = arm.pose_store.load(config.pose)
+    arm.pose_store.load("rest")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir = config.output_dir / f"{config.pose}_check_{timestamp}"
     telemetry = FencingArmTelemetryRecorder(run_dir, config.telemetry_fps)
@@ -344,6 +347,8 @@ def enguard_check(config: EnguardCheckConfig) -> None:
             "Torque_Enable",
         ):
             registers[register] = arm.bus.sync_read(register, normalize=False)
+        if success:
+            arm.move_to_rest()
     finally:
         if arm.is_connected:
             arm.disconnect()
@@ -439,6 +444,7 @@ def move_console(config: MoveConsoleConfig) -> None:
         raise ValueError("--action_delay_s must be non-negative")
     arm = FencingArm(config.robot)
     arm.pose_store.load(config.standby_pose)
+    arm.pose_store.load("rest")
     arm.connect_passive()
     try:
         input(
@@ -464,7 +470,7 @@ def move_console(config: MoveConsoleConfig) -> None:
             print(f"Keyframe motions: {', '.join(motions) or 'none'}")
             print(f"Single poses: {', '.join(poses) or 'none'}")
             print("Shortcuts: 1=cut5, 2=cut4, 3=cut3, 4=parry4, 5=parry5, 6=parry3")
-            name = input("Enter a move number/name, or q to disable torque and quit: ").strip()
+            name = input("Enter a move number/name, or q to lower to rest and quit: ").strip()
             if name.lower() in {"q", "quit", "exit"}:
                 break
             name = MOVE_CONSOLE_SHORTCUTS.get(name, name)
@@ -487,6 +493,7 @@ def move_console(config: MoveConsoleConfig) -> None:
                 tolerance=config.standby_tolerance,
             )
             print(f"FencingArm is holding {config.standby_pose!r}.")
+        arm.move_to_rest()
     finally:
         arm.disconnect()
 

@@ -26,6 +26,7 @@ def run(cfg: FencingDrillConfig) -> None:
     steps = [DrillStep(**step) for step in data["steps"]]
     duration_s = data["duration_s"]
     robot = FencingRobot(cfg.robot)
+    robot.arm.pose_store.load("rest")
     prepare_drill(robot, steps, duration_s, cfg.hz)
     if cfg.dry_run:
         print(f"Validated {len(steps)} steps over {duration_s:g} seconds; hardware not connected.")
@@ -38,6 +39,8 @@ def run(cfg: FencingDrillConfig) -> None:
     try:
         with robot:
             run_drill(robot, steps, duration_s, cfg.hz)
+            robot.stop()
+            robot.arm.move_to_rest()
     except KeyboardInterrupt:
         print("Drill interrupted; hardware cleanup attempted.")
     finally:
