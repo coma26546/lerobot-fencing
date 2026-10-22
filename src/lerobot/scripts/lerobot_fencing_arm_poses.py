@@ -178,6 +178,7 @@ class RunPoseConfig:
     tolerance: float = 2.0
     confirm_each_move: bool = True
     hold_at_target: bool = True
+    diagnostic: bool = False
 
 
 @draccus.wrap()
@@ -196,6 +197,8 @@ def _run_pose(
     arm = FencingArm(config.robot)
     telemetry = None
     arm.pose_store.load("rest")
+    if config.diagnostic and telemetry_output_dir is None:
+        telemetry_output_dir = Path("outputs/fencing_arm_diagnostics")
     if telemetry_output_dir is not None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         run_dir = telemetry_output_dir / f"{config.pose}_{timestamp}"
@@ -265,11 +268,15 @@ def _run_pose(
             input("Holding position. Press ENTER to lower to rest, disable torque and exit.")
         arm.move_to_rest()
     finally:
-        arm.disconnect()
-        if telemetry is not None:
-            telemetry.close()
+        try:
+            arm.disconnect()
+        finally:
+            if telemetry is not None:
+                telemetry.close()
+                if config.diagnostic:
+                    telemetry.print_summary()
 
-    if telemetry is not None:
+    if telemetry is not None and not config.diagnostic:
         graphs = telemetry.render_graphs()
         print(f"Saved raw telemetry to {telemetry.csv_path}")
         print(f"Saved {len(graphs)} graphs to {telemetry.output_dir}")

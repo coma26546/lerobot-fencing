@@ -85,6 +85,30 @@ class FencingArmTelemetryRecorder:
             os.fsync(self.file.fileno())
             self.file.close()
 
+    def print_summary(self) -> None:
+        """Report sampled magnitudes; peaks are sampled peaks, not continuous maxima."""
+        self.close()
+        samples = {motor: [] for motor in MOTOR_NAMES}
+        with self.csv_path.open(newline="", encoding="utf-8") as file:
+            for row in csv.DictReader(file):
+                samples[row["motor"]].append(
+                    (abs(float(row["current_raw"])), abs(float(row["torque_load_percent"])))
+                )
+        print("\nMotor diagnostics: full run, including standby and lowering to rest")
+        print("Sample averages and peaks of absolute values; current in raw units, load estimate in %.")
+        print(f"{'Motor':<18} {'Samples':>7} {'Avg current':>12} {'Peak current':>12} {'Avg load %':>11} {'Peak load %':>12}")
+        for motor, rows in samples.items():
+            if not rows:
+                print(f"{motor:<18} {'0':>7}  No samples")
+                continue
+            currents, loads = zip(*rows, strict=True)
+            print(
+                f"{motor:<18} {len(rows):>7} {sum(currents) / len(rows):>12.2f} "
+                f"{max(currents):>12.2f} {sum(loads) / len(rows):>11.2f} {max(loads):>12.2f}"
+            )
+        print("Load feedback is not calibrated shaft torque (N m).")
+        print(f"Raw telemetry: {self.csv_path}")
+
     def render_graphs(self) -> list[Path]:
         self.close()
         rows = []

@@ -2,12 +2,30 @@
 
 import inspect
 import unittest
+import tempfile
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from lerobot.scripts import lerobot_fencing_arm_poses as scripts
+from lerobot.robots.fencing_arm.telemetry import FencingArmTelemetryRecorder
 
 
 class RestShutdownTests(unittest.TestCase):
+    def test_diagnostic_summary_uses_magnitudes_and_reports_missing_samples(self):
+        with tempfile.TemporaryDirectory() as directory:
+            recorder = FencingArmTelemetryRecorder(Path(directory))
+            for current, load in [(-10, -20), (30, 40)]:
+                recorder.writer.writerow({
+                    "motor": "shoulder_yaw", "current_raw": current,
+                    "torque_load_percent": load,
+                })
+            with patch("builtins.print") as output:
+                recorder.print_summary()
+            lines = [str(call.args[0]) for call in output.call_args_list]
+            row = next(line for line in lines if line.startswith("shoulder_yaw"))
+            self.assertEqual(row.split()[1:], ["2", "20.00", "30.00", "30.00", "40.00"])
+            self.assertTrue(any("No samples" in line for line in lines))
+
     def setUp(self):
         self.arm = MagicMock()
         self.arm.pose_store.has_recording.return_value = True
