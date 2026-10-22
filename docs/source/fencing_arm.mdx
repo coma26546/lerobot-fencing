@@ -372,8 +372,10 @@ may change in one update, so a very high playback speed may be limited by that c
 ### Run a movement and graph motor telemetry
 
 For a terminal diagnostic table, add `--diagnostic=true` to `lerobot-fencing-arm-run-pose`.
-It samples at 5 Hz and prints each motor's sample count, average and peak absolute current
-(raw controller units), and average and peak absolute load estimate (%). These cover the
+It samples at 5 Hz and prints each motor's average and peak absolute current in raw controller units
+and estimated amps (raw x 0.0065), plus average and peak absolute load estimate (%).
+The amp conversion is not verified for the installed motor firmware. Sample counts are not displayed;
+all captured readings remain in the CSV. These cover the
 full run, including standby, holding observations, and lowering to rest, rather than only the cut.
 Load is not calibrated shaft torque, and sampled peaks may miss brief spikes. Extra bus reads
 can slow control updates. Raw CSV data is saved under `outputs/fencing_arm_diagnostics`.

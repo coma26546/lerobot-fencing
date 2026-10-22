@@ -96,16 +96,18 @@ class FencingArmTelemetryRecorder:
                 )
         print("\nMotor diagnostics: full run, including standby and lowering to rest")
         print("Sample averages and peaks of absolute values; current in raw units, load estimate in %.")
-        print(f"{'Motor':<18} {'Samples':>7} {'Avg current':>12} {'Peak current':>12} {'Avg load %':>11} {'Peak load %':>12}")
+        print(f"{'Motor':<18} {'Avg raw':>9} {'Peak raw':>9} {'Avg A est.':>11} {'Peak A est.':>11} {'Avg load %':>11} {'Peak load %':>12}")
         for motor, rows in samples.items():
             if not rows:
-                print(f"{motor:<18} {'0':>7}  No samples")
+                print(f"{motor:<18} No samples")
                 continue
             currents, loads = zip(*rows, strict=True)
             print(
-                f"{motor:<18} {len(rows):>7} {sum(currents) / len(rows):>12.2f} "
-                f"{max(currents):>12.2f} {sum(loads) / len(rows):>11.2f} {max(loads):>12.2f}"
+                f"{motor:<18} {sum(currents) / len(rows):>9.2f} {max(currents):>9.2f} "
+                f"{sum(currents) / len(rows) * 0.0065:>11.3f} {max(currents) * 0.0065:>11.3f} "
+                f"{sum(loads) / len(rows):>11.2f} {max(loads):>12.2f}"
             )
+        print("Estimated amps = raw current x 0.0065; scale not verified for this motor firmware.")
         print("Load feedback is not calibrated shaft torque (N m).")
         print(f"Raw telemetry: {self.csv_path}")
 

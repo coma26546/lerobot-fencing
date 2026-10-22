@@ -23,7 +23,8 @@ class RestShutdownTests(unittest.TestCase):
                 recorder.print_summary()
             lines = [str(call.args[0]) for call in output.call_args_list]
             row = next(line for line in lines if line.startswith("shoulder_yaw"))
-            self.assertEqual(row.split()[1:], ["2", "20.00", "30.00", "30.00", "40.00"])
+            self.assertEqual(row.split()[1:], ["20.00", "30.00", "0.130", "0.195", "30.00", "40.00"])
+            self.assertFalse(any("Samples" in line for line in lines))
             self.assertTrue(any("No samples" in line for line in lines))
 
     def setUp(self):
