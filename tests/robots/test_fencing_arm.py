@@ -8,6 +8,8 @@
 
 from unittest.mock import MagicMock, call, patch
 
+from lerobot.motors import Motor, MotorNormMode
+from lerobot.motors.feetech import FeetechMotorsBus
 from lerobot.robots.fencing_arm import FencingArm, FencingArmConfig
 from lerobot.robots.fencing_arm.poses import FENCING_ARM_JOINT_KEYS
 from lerobot.robots.so_follower import SOFollower
@@ -53,13 +55,35 @@ def test_fencing_arm_motor_layout(tmp_path):
     bus_2_motors = bus_2_call.kwargs["motors"]
     assert {name: (motor.id, motor.model) for name, motor in bus_1_motors.items()} == {
         "shoulder_yaw": (1, "sts3250"),
-        "shoulder_pitch": (2, "sts3250"),
+        "shoulder_pitch": (2, "sts3095"),
     }
     assert {name: (motor.id, motor.model) for name, motor in bus_2_motors.items()} == {
         "elbow_pitch": (3, "sts3250"),
         "elbow_roll": (4, "sts3250"),
         "wrist_pitch": (5, "sts3215"),
     }
+
+
+def test_shoulder_pitch_driver_supports_mixed_bus_and_motor_setup():
+    motors = {
+        "shoulder_yaw": Motor(1, "sts3250", MotorNormMode.DEGREES),
+        "shoulder_pitch": Motor(2, "sts3095", MotorNormMode.DEGREES),
+    }
+    bus = FeetechMotorsBus("unused", motors)
+    with patch.object(bus, "ping", side_effect=[2825, 2569]):
+        bus._assert_motors_exist()
+
+    with (
+        patch.object(bus, "set_baudrate") as set_baudrate,
+        patch.object(bus, "broadcast_ping", return_value={1: 2569}),
+    ):
+        assert bus._find_single_motor("shoulder_pitch") == (1_000_000, 1)
+        set_baudrate.assert_called_once_with(1_000_000)
+
+    assert bus.model_resolution_table["sts3095"] == 4096
+    assert bus.model_ctrl_table["sts3095"]["Present_Position"] == (56, 2)
+    assert bus.model_ctrl_table["sts3095"]["Goal_Position"] == (42, 2)
+    assert bus.model_encoding_table["sts3095"]["Homing_Offset"] == 11
 
 
 def test_connect_passive_uses_full_strength_fencing_tuning(tmp_path):

@@ -19,7 +19,7 @@ The motors are split across two independently powered Feetech serial buses to pr
 | Motor ID | Joint name       | Motor model | Mechanical notes                  |
 | :------: | ---------------- | :---------: | --------------------------------- |
 |    1     | `shoulder_yaw`   |   STS3250   | Direct drive                      |
-|    2     | `shoulder_pitch` |   STS3250   | 2:1 reduction at the joint output |
+|    2     | `shoulder_pitch` |   STS3095   | 2:1 reduction at the joint output |
 |    3     | `elbow_pitch`    |   STS3250   | Direct drive                      |
 |    4     | `elbow_roll`     |   STS3250   | Direct drive                      |
 |    5     | `wrist_pitch`    |   STS3215   | 12 V, 30 kg-cm version            |
@@ -29,6 +29,31 @@ and actions currently remain in **motor-shaft coordinates**. With the default de
 shoulder-pitch motor movement produces approximately 10° at the joint output. The reduction approximately
 doubles output torque, ignoring transmission losses. Account for this when defining physical joint limits,
 kinematics, or a URDF.
+
+### Replacing shoulder pitch with an STS3095
+
+Motor 2 is configured specifically as `sts3095`. The Feetech driver uses the STS register map,
+4096-count encoder resolution, protocol 0, and model number 2569, matching the
+[AlohaMini STS3095 integration](https://github.com/liyiteng/lerobot_alohamini/blob/main/src/lerobot/motors/feetech/tables.py).
+The robot class, joint names, serial ports, and motor-shaft position units stay the same.
+This assumes the external 2:1 shoulder-pitch reduction is retained.
+
+After physically replacing the motor:
+
+1. Check the STS3095 voltage variant against the bus 1 supply before applying power. The model name
+   alone does not establish its voltage rating; use the label and datasheet for your exact unit.
+2. Run the motor-ID setup below, following the one-motor-at-a-time prompts, to assign the replacement
+   ID 2 and the bus baud rate. Setup verifies the model number; do not bypass a model mismatch.
+3. Run calibration below with your usual robot ID and choose `c` to measure fresh offsets and limits.
+   Do not reuse the removed motor's calibration.
+4. Verify shoulder-pitch position and direction using the observation check below. Re-teach saved
+   poses (including `rest`) and recorded motions before playback because the new calibration can
+   change their physical meaning.
+
+The existing PID, acceleration, and torque-limit settings are still applied. They are starting settings,
+not measured tuning for the replacement motor; check holding and small movements before normal playback.
+On connection, the driver also requires matching firmware versions on each physical bus. If bus 1
+reports a firmware mismatch, use Feetech's tool to check compatible firmware for both motors.
 
 ## Install the project
 

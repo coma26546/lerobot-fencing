@@ -49,7 +49,7 @@ class FencingArm(SOFollower):
             port_2=config.port_2,
             bus_1_motors={
                 "shoulder_yaw": Motor(1, "sts3250", norm_mode),
-                "shoulder_pitch": Motor(2, "sts3250", norm_mode),
+                "shoulder_pitch": Motor(2, "sts3095", norm_mode),
             },
             bus_2_motors={
                 "elbow_pitch": Motor(3, "sts3250", norm_mode),
