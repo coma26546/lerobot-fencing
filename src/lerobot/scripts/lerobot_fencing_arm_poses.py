@@ -179,6 +179,7 @@ class RunPoseConfig:
     confirm_each_move: bool = True
     hold_at_target: bool = True
     diagnostic: bool = False
+    countdown: int = 0
 
 
 @draccus.wrap()
@@ -194,6 +195,8 @@ def _run_pose(
 ) -> None:
     init_logging()
     _require_robot_id(config.robot)
+    if config.countdown < 0:
+        raise ValueError("--countdown must be a non-negative whole number of seconds")
     arm = FencingArm(config.robot)
     telemetry = None
     arm.pose_store.load("rest")
@@ -242,6 +245,9 @@ def _run_pose(
         if config.pose != config.standby_pose:
             if config.confirm_each_move:
                 input(f"Press ENTER to move to preset {config.pose!r}, or Ctrl+C to abort.")
+            for remaining in range(config.countdown, 0, -1):
+                print(f"Starting {config.pose!r} in {remaining}s...", flush=True)
+                time.sleep(1)
             if is_recording:
                 arm.play_recording(config.pose, fps=config.fps, max_step=config.max_step)
             for index, keyframe in enumerate(target_keyframes, start=1):

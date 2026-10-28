@@ -47,6 +47,24 @@ class RestShutdownTests(unittest.TestCase):
         self.assertLess(calls.index("play_recording"), calls.index("move_to_rest"))
         self.assertLess(calls.index("move_to_rest"), calls.index("disconnect"))
 
+    def test_countdown_waits_after_confirmation_before_action(self):
+        self.config.countdown = 3
+        self.config.confirm_each_move = True
+        events = []
+        self.arm.move_to_pose.side_effect = lambda *a, **kw: events.append("standby")
+        self.arm.play_recording.side_effect = lambda *a, **kw: events.append("action")
+        with patch("builtins.input", side_effect=lambda *a: events.append("confirm")), patch.object(
+            scripts.time, "sleep", side_effect=lambda seconds: events.append(seconds)
+        ):
+            self.run_pose()
+        self.assertEqual(events, ["confirm", "standby", "confirm", 1, 1, 1, "action"])
+
+    def test_negative_countdown_prevents_connection(self):
+        self.config.countdown = -1
+        with self.assertRaisesRegex(ValueError, "countdown"):
+            self.run_pose()
+        self.arm.connect_passive.assert_not_called()
+
     def test_missing_rest_prevents_connection(self):
         self.arm.pose_store.load.side_effect = ValueError("Missing rest")
         with self.assertRaises(ValueError):

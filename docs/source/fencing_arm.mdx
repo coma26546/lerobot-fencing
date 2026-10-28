@@ -281,6 +281,12 @@ joints synchronized instead of allowing short-distance joints to finish before l
 
 ## Smooth and edit a recorded motion
 
+Add `--countdown=10` to `lerobot-fencing-arm-run-pose` to hold en garde for ten seconds
+after you press Enter to confirm the action. The terminal prints the remaining seconds before
+starting the first action frame. Use any non-negative whole number; the default `0` adds no delay.
+It also works with `--diagnostic=true` and telemetry playback. With `--confirm_each_move=false`,
+the countdown starts automatically after reaching en garde. Ctrl+C aborts using normal cleanup.
+
 Newly recorded motions use `smoothstep` interpolation by default. It eases each transition in and out instead
 of changing velocity abruptly at a keyframe. Use `smootherstep` for an even softer start and stop, or `linear`
 for constant progress through a transition.
