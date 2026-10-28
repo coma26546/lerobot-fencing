@@ -94,20 +94,25 @@ class FencingArmTelemetryRecorder:
                 samples[row["motor"]].append(
                     (abs(float(row["current_raw"])), abs(float(row["torque_load_percent"])))
                 )
-        print("\nMotor diagnostics: full run, including standby and lowering to rest")
-        print("Sample averages and peaks of absolute values; current in raw units, load estimate in %.")
-        print(f"{'Motor':<18} {'Avg raw':>9} {'Peak raw':>9} {'Avg A est.':>11} {'Peak A est.':>11} {'Avg load %':>11} {'Peak load %':>12}")
+        print("\nMotor diagnostics (full run: standby, move, rest)")
+        print("Absolute values. Current: raw units / estimated A. Load: %.")
+        header = (
+            f"{'Motor':<16} {'Raw avg':>9} {'Raw peak':>9} "
+            f"{'A avg':>9} {'A peak':>9} {'Load avg':>9} {'Load peak':>9}"
+        )
+        print(header)
+        print("-" * len(header))
         for motor, rows in samples.items():
             if not rows:
-                print(f"{motor:<18} No samples")
+                print(f"{motor:<16} No samples")
                 continue
             currents, loads = zip(*rows, strict=True)
             print(
-                f"{motor:<18} {sum(currents) / len(rows):>9.2f} {max(currents):>9.2f} "
-                f"{sum(currents) / len(rows) * 0.0065:>11.3f} {max(currents) * 0.0065:>11.3f} "
-                f"{sum(loads) / len(rows):>11.2f} {max(loads):>12.2f}"
+                f"{motor:<16} {sum(currents) / len(rows):>9.2f} {max(currents):>9.2f} "
+                f"{sum(currents) / len(rows) * 0.0065:>9.3f} {max(currents) * 0.0065:>9.3f} "
+                f"{sum(loads) / len(rows):>9.2f} {max(loads):>9.2f}"
             )
-        print("Estimated amps = raw current x 0.0065; scale not verified for this motor firmware.")
+        print("Estimated A = raw x 0.0065 (scale unverified for motor firmware).")
         print("Load feedback is not calibrated shaft torque (N m).")
         print(f"Raw telemetry: {self.csv_path}")
 
