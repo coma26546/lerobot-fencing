@@ -19,7 +19,7 @@ The motors are split across two independently powered Feetech serial buses to pr
 | Motor ID | Joint name       | Motor model | Mechanical notes                  |
 | :------: | ---------------- | :---------: | --------------------------------- |
 |    1     | `shoulder_yaw`   |   STS3250   | Direct drive                      |
-|    2     | `shoulder_pitch` |   STS3095   | 2:1 reduction at the joint output |
+|    2     | `shoulder_pitch` |   STS3095   | Direct Drive |
 |    3     | `elbow_pitch`    |   STS3250   | Direct drive                      |
 |    4     | `elbow_roll`     |   STS3250   | Direct drive                      |
 |    5     | `wrist_pitch`    |   STS3215   | 12 V, 30 kg-cm version            |
@@ -29,31 +29,6 @@ and actions currently remain in **motor-shaft coordinates**. With the default de
 shoulder-pitch motor movement produces approximately 10° at the joint output. The reduction approximately
 doubles output torque, ignoring transmission losses. Account for this when defining physical joint limits,
 kinematics, or a URDF.
-
-### Replacing shoulder pitch with an STS3095
-
-Motor 2 is configured specifically as `sts3095`. The Feetech driver uses the STS register map,
-4096-count encoder resolution, protocol 0, and model number 2569, matching the
-[AlohaMini STS3095 integration](https://github.com/liyiteng/lerobot_alohamini/blob/main/src/lerobot/motors/feetech/tables.py).
-The robot class, joint names, serial ports, and motor-shaft position units stay the same.
-This assumes the external 2:1 shoulder-pitch reduction is retained.
-
-After physically replacing the motor:
-
-1. Check the STS3095 voltage variant against the bus 1 supply before applying power. The model name
-   alone does not establish its voltage rating; use the label and datasheet for your exact unit.
-2. Run the motor-ID setup below, following the one-motor-at-a-time prompts, to assign the replacement
-   ID 2 and the bus baud rate. Setup verifies the model number; do not bypass a model mismatch.
-3. Run calibration below with your usual robot ID and choose `c` to measure fresh offsets and limits.
-   Do not reuse the removed motor's calibration.
-4. Verify shoulder-pitch position and direction using the observation check below. Re-teach saved
-   poses (including `rest`) and recorded motions before playback because the new calibration can
-   change their physical meaning.
-
-The existing PID, acceleration, and torque-limit settings are still applied. They are starting settings,
-not measured tuning for the replacement motor; check holding and small movements before normal playback.
-On connection, the driver also requires matching firmware versions on each physical bus. If bus 1
-reports a firmware mismatch, use Feetech's tool to check compatible firmware for both motors.
 
 ## Install the project
 
@@ -226,35 +201,6 @@ match.
 > Torque turns off during recording, so gravity may make the arm drop immediately. Remove the weapon and
 > support the arm before running the command. Keep clear of pinch points.
 
-## Record a supported rest position
-
-Before running cuts or parries, record a single `rest` pose on the Pi:
-
-```bash
-uv run lerobot-fencing-arm-record-pose \
-    --robot.port_1=/dev/ttyACM2 \
-    --robot.port_2=/dev/ttyACM1 \
-    --robot.id=fencing_arm_01 \
-    --pose=rest
-```
-
-Torque is disabled while recording. Support the arm, lower it to a mechanically supported position
-that stays stable without motor torque, and press Enter. This replaces any previous `rest` pose.
-Choose a position with a clear approach from your cuts, parries, and en garde; a saved endpoint alone
-does not provide collision avoidance.
-
-Pose playback, telemetry playback, the interactive console, and both fencing drill commands require
-`rest` before starting. On normal completion (or `q` in the console), they lower to `rest` before
-disconnecting. The transition uses `smootherstep`, at least three seconds, 30 updates per second,
-and a maximum step of 1 motor-coordinate unit per update. Rest is accepted when every joint is
-within 5 motor-coordinate units (motor degrees with the default configuration) of the saved pose.
-Console moves still return to en garde
-between actions; lowering happens when the console exits.
-
-Ctrl+C and errors retain immediate hardware cleanup without an additional commanded movement.
-If lowering fails or times out, cleanup still runs and may release torque before reaching rest;
-keep the arm supported during initial testing. Recording commands do not automatically lower the arm.
-
 ## Stand by in en garde and execute a preset
 
 After both `enguard` and the desired motion have been recorded, run:
@@ -273,19 +219,12 @@ The command performs this sequence:
 2. Waits for confirmation, then approaches `enguard` in small increments.
 3. Holds en garde in standby until you press Enter.
 4. Executes every requested keyframe in its recorded order.
-5. Holds the final keyframe until you press Enter again, then gently moves to `rest`, disables torque,
-   and exits. With `--hold_at_target=false`, it starts lowering immediately after the move.
+5. Holds the final keyframe until you press Enter again, then disables torque and exits.
 
 Within each transition, all joints advance by the same percentage of their required travel. This keeps the
 joints synchronized instead of allowing short-distance joints to finish before long-distance joints.
 
 ## Smooth and edit a recorded motion
-
-Add `--countdown=10` to `lerobot-fencing-arm-run-pose` to hold en garde for ten seconds
-after you press Enter to confirm the action. The terminal prints the remaining seconds before
-starting the first action frame. Use any non-negative whole number; the default `0` adds no delay.
-It also works with `--diagnostic=true` and telemetry playback. With `--confirm_each_move=false`,
-the countdown starts automatically after reaching en garde. Ctrl+C aborts using normal cleanup.
 
 Newly recorded motions use `smoothstep` interpolation by default. It eases each transition in and out instead
 of changing velocity abruptly at a keyframe. Use `smootherstep` for an even softer start and stop, or `linear`
@@ -401,15 +340,6 @@ Here `--fps` is the playback control rate, not a camera setting. `--max_step` st
 may change in one update, so a very high playback speed may be limited by that cap.
 
 ### Run a movement and graph motor telemetry
-
-For a terminal diagnostic table, add `--diagnostic=true` to `lerobot-fencing-arm-run-pose`.
-It samples at 5 Hz and prints each motor's average and peak absolute current in raw controller units
-and estimated amps (raw x 0.0065), plus average and peak absolute load estimate (%).
-The amp conversion is not verified for the installed motor firmware. Sample counts are not displayed;
-all captured readings remain in the CSV. These cover the
-full run, including standby, holding observations, and lowering to rest, rather than only the cut.
-Load is not calibrated shaft torque, and sampled peaks may miss brief spikes. Extra bus reads
-can slow control updates. Raw CSV data is saved under `outputs/fencing_arm_diagnostics`.
 
 Use the telemetry runner for either a keyframe motion or a hand-recorded motion:
 

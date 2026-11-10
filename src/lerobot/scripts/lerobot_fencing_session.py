@@ -8,6 +8,7 @@ from pathlib import Path
 import draccus
 
 from lerobot.robots.fencing_robot import FencingRobot, FencingRobotConfig
+from lerobot.robots.fencing_robot.remote import TcpCommandSource
 from lerobot.robots.fencing_robot.session import KeyboardCommands, ParryDrill, ParryDrillSession
 
 
@@ -16,6 +17,10 @@ class FencingSessionConfig:
     robot: FencingRobotConfig
     drill: Path
     dry_run: bool = False
+    remote: bool = False
+    remote_host: str = "0.0.0.0"
+    remote_port: int = 8765
+    remote_token: str | None = None
 
 
 @draccus.wrap()
@@ -30,15 +35,21 @@ def run(cfg: FencingSessionConfig) -> None:
     if cfg.dry_run:
         print("Drill configuration and all saved moves validated; hardware not connected.")
         return
+    if cfg.remote and not cfg.remote_token:
+        raise ValueError("remote_token is required when remote=true")
 
     def interrupt(signum, frame):
         raise KeyboardInterrupt
 
     previous = signal.signal(signal.SIGTERM, interrupt)
-    commands = None
+    commands: KeyboardCommands | TcpCommandSource | None = None
     try:
         with robot:
-            commands = KeyboardCommands()
+            if cfg.remote:
+                commands = TcpCommandSource(cfg.remote_host, cfg.remote_port, cfg.remote_token)
+                print(f"Waiting for the fencing remote on {commands.address[0]}:{commands.address[1]}.")
+            else:
+                commands = KeyboardCommands()
             session.commands = commands
             session.run()
             robot.stop()
