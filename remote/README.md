@@ -20,13 +20,17 @@ ground pin:
 
 | Button | BCM GPIO | Keyboard command |
 | --- | ---: | --- |
-| Start | 17 | `s` |
+| En Garde / standby only | 17 | `g` |
+| Start a repetition | 24 | `s` |
 | Replay/reset | 27 | `r` |
 | End | 22 | `q` |
 
 The inputs use internal pull-ups. Use only Pi 3.3 V GPIO and ground; do not
-connect a GPIO pin to 5 V. Override the defaults with `--start-pin`,
-`--replay-pin`, or `--end-pin`.
+connect a GPIO pin to 5 V. Override the defaults with `--enguard-pin`,
+`--start-pin`, `--replay-pin`, or `--end-pin`.
+
+The En Garde button moves the arm to the saved standby move and then waits; it
+does not start the drill. The Start button begins one repetition.
 
 ## Run the robot session on the Pi 5
 
@@ -55,8 +59,10 @@ On the Pi Zero, use the same token and the Pi 5's private Wi-Fi address:
 fencing-remote --host=192.168.1.50 --token="PASTE_THE_SHARED_TOKEN_HERE"
 ```
 
-Press **Start** when the session is ready. After a repetition, press
+Press **En Garde / standby only** first to verify that the remote is received
+and the arm moves to its saved standby pose without starting a repetition.
+Press **Start** to begin the drill. After a repetition, press
 **Replay/reset** to return to the saved start position; press **Start** again
 for the next repetition. **End** exits the session and requests the configured
-rest pose. Only `s`, `r`, and `q` are accepted by the listener. Keep it on a
-trusted private network; the button remote is not an emergency stop.
+rest pose. Only `g`, `s`, `r`, and `q` are accepted by the listener. Keep it on
+a trusted private network; the button remote is not an emergency stop.

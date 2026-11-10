@@ -9,7 +9,7 @@ import threading
 from contextlib import suppress
 
 logger = logging.getLogger(__name__)
-VALID_COMMANDS = {"s", "r", "q"}
+VALID_COMMANDS = {"g", "s", "r", "q"}
 
 
 class _RemoteServer(socketserver.ThreadingTCPServer):

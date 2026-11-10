@@ -8,7 +8,8 @@ import threading
 from collections.abc import Callable
 
 BUTTONS = {
-    "start": ("s", 17),
+    "enguard": ("g", 17),
+    "start": ("s", 24),
     "replay": ("r", 27),
     "end": ("q", 22),
 }
@@ -71,6 +72,7 @@ def _make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--host", required=True, help="Robot Pi 5 IP address or hostname")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--token", required=True, help="Shared token configured on the robot")
+    parser.add_argument("--enguard-pin", type=int, default=BUTTONS["enguard"][1], help="BCM pin")
     parser.add_argument("--start-pin", type=int, default=BUTTONS["start"][1], help="BCM pin")
     parser.add_argument("--replay-pin", type=int, default=BUTTONS["replay"][1], help="BCM pin")
     parser.add_argument("--end-pin", type=int, default=BUTTONS["end"][1], help="BCM pin")
@@ -86,6 +88,7 @@ def run(
     if not 0 < args.port <= 65535:
         raise ValueError("port must be between 1 and 65535")
     pins = {
+        "enguard": args.enguard_pin,
         "start": args.start_pin,
         "replay": args.replay_pin,
         "end": args.end_pin,
@@ -107,7 +110,7 @@ def run(
         for name, button in zip(pins, buttons, strict=True):
             command = BUTTONS[name][0]
             button.when_pressed = lambda command=command: events.put(command)
-        print("Buttons: start runs a rep; replay resets after a rep; end exits to rest.")
+        print("Buttons: enguard moves to standby; start runs a rep; replay resets; end exits to rest.")
         _send_loop(args.host, args.port, args.token, events, stopping)
     except KeyboardInterrupt:
         print("Remote stopped.")

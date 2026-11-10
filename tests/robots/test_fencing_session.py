@@ -118,6 +118,27 @@ def test_q_ends_without_returning_home(hardware):
     assert not any(action["base.left_speed"] > 0 for _, action in actions)
 
 
+def test_enguard_command_moves_to_standby_without_starting_a_rep(hardware):
+    robot, commands, _, _, _, actions = hardware
+    ready_prompts = 0
+
+    def announce(message):
+        nonlocal ready_prompts
+        if message.startswith("Ready:"):
+            ready_prompts += 1
+            commands.pending.append("g" if ready_prompts == 1 else "q")
+
+    session = ParryDrillSession(robot, ParryDrill(), commands, announce=announce)
+    session.run()
+
+    robot.arm.pose_store.load.assert_any_call("enguard")
+    assert robot.send_action.call_count > 0
+    assert all(action["shoulder_yaw.pos"] == 0 for _, action in actions)
+    assert all(action["base.left_speed"] == action["base.right_speed"] == 0 for _, action in actions)
+    assert robot.stop.call_count > 0
+    assert ready_prompts == 2
+
+
 def test_distance_retreat_finishes_before_riposte(hardware):
     robot, commands, clock, encoders, position, actions = hardware
     home = dict(encoders)

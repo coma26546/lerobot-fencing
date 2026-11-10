@@ -24,7 +24,7 @@ def _poll(source, timeout_s=1.0):
 def test_authenticated_remote_sends_keyboard_commands():
     token = "test-remote-token-1234"
     with TcpCommandSource("127.0.0.1", 0, token) as source, _connect(source, token)[0] as client:
-        for command in ("s", "r", "q"):
+        for command in ("g", "s", "r", "q"):
             client.sendall(command.encode() + b"\n")
             assert _poll(source) == command
 

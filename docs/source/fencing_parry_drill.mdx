@@ -178,15 +178,15 @@ start this session on the robot Pi 5 with `--remote=true`,
 `--remote_token` of at least 16 characters. See the remote guide for the
 complete install and run commands.
 
-The default momentary-button mapping is Start (BCM GPIO 17, sends `s`),
-Replay/reset (BCM GPIO 27, sends `r`), and End (BCM GPIO 22, sends `q`). Start
-begins a repetition at the ready prompt. Replay/reset returns to the saved
-starting position at the completed-rep prompt; press Start again to begin the
-next rep. End exits the session and runs the normal rest shutdown. Button pins
-can be changed using the remote's `--start-pin`, `--replay-pin`, and `--end-pin`
-options.
+The default momentary-button mapping is En Garde/standby only (BCM GPIO 17,
+sends `g`), Start (BCM GPIO 24, sends `s`), Replay/reset (BCM GPIO 27, sends
+`r`), and End (BCM GPIO 22, sends `q`). En Garde moves to the saved standby move
+without starting a rep. Start begins a repetition at the ready prompt.
+Replay/reset returns to the saved starting position at the completed-rep prompt;
+press Start again to begin the next rep. End exits the session and runs the
+normal rest shutdown. Button pins can be changed using the remote's
+`--enguard-pin`, `--start-pin`, `--replay-pin`, and `--end-pin` options.
 
 The TCP listener accepts one authenticated remote at a time and only accepts
-the same `s`, `r`, and `q` commands as the keyboard session. Keep it on a
-trusted private network. The remote is a software controller, not an
-emergency-stop device.
+the `g`, `s`, `r`, and `q` commands. Keep it on a trusted private network. The
+remote is a software controller, not an emergency-stop device.

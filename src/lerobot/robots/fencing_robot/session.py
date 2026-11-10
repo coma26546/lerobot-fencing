@@ -130,7 +130,9 @@ class ParryDrill:
             type(self.retreat_distance_counts) is not int
             or not self.return_tolerance_counts < self.retreat_distance_counts <= self.max_return_counts
         ):
-            raise ValueError("retreat_distance_counts must exceed tolerance and stay within max_return_counts")
+            raise ValueError(
+                "retreat_distance_counts must exceed tolerance and stay within max_return_counts"
+            )
 
 
 @dataclass
@@ -384,7 +386,16 @@ class ParryDrillSession:
             rep = 0
             ready = False
             while True:
-                self._wait("Ready: s + Enter starts a rep; q + Enter ends the session.", {"s", "start"})
+                command = self._wait(
+                    "Ready: g + Enter moves to standby; s + Enter starts a rep; q + Enter ends the session.",
+                    {"g", "enguard", "s", "start"},
+                )
+                if command in ("g", "enguard"):
+                    if not ready:
+                        self._move("standby")
+                        ready = True
+                    self.announce("At standby. Press s to start a repetition.")
+                    continue
                 if not ready:
                     self._move("standby")
                     ready = True
